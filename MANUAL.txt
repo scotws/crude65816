@@ -1,0 +1,31 @@
+Manual for The Crude 65816 Emulator 
+Scot W. Stevenson <scot.stevenson@gmail.com>
+First version: 09. Jan 2015
+This version: 09. Jan 2015
+
+
+    implied                   dex                    dex
+    accumulator               inc                    inc.a
+    immediate                 lda #$00            00 lda.#
+    absolute                  lda $1000         1000 lda
+    absolute x indexed        lda $1000,x       1000 lda.x
+    absolute y indexed        lda $1000,y       1000 lda.y
+    absolute indirect         jmp ($1000)       1000 jmp.i
+    indexed indirect          jmp ($1000,x)     1000 jmp.xi
+    absolute long             jmp $101000     101000 jmp.l    (65816)
+    absolute long x indexed   jmp $101000,x   101000 jmp.lx   (65816)
+    absolute indirect long    jmp [$1000]       1000 jmp.il   (65816)
+    direct page               lda $10             10 lda.d
+    direct page x indexed     lda $10,x           10 lda.dx
+    direct page y indexed     lda $10,y           10 lda.dy
+    direct page indirect      lda ($10)           10 lda.di
+    dp indirect x indexed     lda ($10,x)         10 lda.dxi
+    dp indirect long          lda [$10]           10 lda.dil  (65816) 
+    dp indirect y indexed     lda ($10),y         10 lda.diy  
+    dp indirect long y index  lda [$10],y         10 lda.dily (65816)
+    relative                  bne $2000         2000 bne
+    relative long             brl $200000      20000 brl      (65816)
+    stack relative            lda 3,S              3 lda.s    (65816)
+    stack rel ind y indexed   lda (3,S),y          3 lda.siy  (65816)
+    block move                mvp 0,0            0 0 mvp      (65816) 
+

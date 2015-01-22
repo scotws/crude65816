@@ -1,7 +1,21 @@
 Manual for The Crude 65816 Emulator 
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 09. Jan 2015
-This version: 09. Jan 2015
+This version: 22. Jan 2015
+
+
+GUIDELINES
+
+- A register is Top of Stack (TOS). When split (emulated mode), B is NOS
+It is the responsibility of the routine that places the value in the register to make the appropirate number of bits
+- All address reads ("fetch") to memory are 24 bit 
+- Status flags are full-featured Forth flags (one cell) 
+- the PC is 16 bit
+- 
+
+
+
+NAMES OF MODES 
 
 
     implied                   dex                    dex

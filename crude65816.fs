@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 09. Jan 2015
+\ This version: 22. Jan 2015
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -37,6 +37,7 @@ cr .( Defining things ...)
 variable PC       \ Program Counter of CPU 
 
 
+
 \ ---- HELPER FUNCTIONS ----
 
 \ mask addresses
@@ -64,26 +65,90 @@ cr .( Setting up Memory ...)
 
 \ We just allot the whole possible memory range. Note that this will fail
 \ unless you called Gforth with "-m 1G" or something of that size like you
-\ were told
-\ TODO close file when done
+\ were told in the MANUAL.txt
 create memory 16M allot
 
-: loadrom ( 65addr addr u -- )
+: loadrom ( 65addr24 addr u -- )
    r/o open-file drop            ( 65addr fileid ) 
    slurp-fid                     ( 65addr addr u ) 
    rot  memory +  swap           ( addr 65addrROM u ) 
    move ;  
 
 \ load ROM files into memory
+\ TODO close file when done
 include config.fs  
+
+
+\ all accesses to memory are full 24 bit
+: mem16>24  ( u8 65addr16 -- 65addr24) ; 
+: mem8>24  ( u8 u8 u8 -- 65addr24) ; 
+
+
+\ Routines for fetching and storing memory
+defer fetch.a
+defer fetch.xy
+: fetch8  ( 65addr24 -- u8 ) ; 
+: fetch16  ( 65addr24 -- u16 ) ; 
+
+defer store.a
+defer store.xy
+: store8 ( u8 65addr24 -- ) ; 
+: store16 ( u16 65addr24 -- ) ; 
 
 
 \ ---- HARDWARE: CPU ----
 cr .( Setting up CPU ... ) 
 
-: load8 ( 65addr -- u8 ) ; 
-: load16 ( 65addr -- u16 ) ;
-: load24 ( 65addr -- u24 ) ;
+variable pc    \ program counter (16 bit) 
+variable x     \ X register (8\16 bit)
+variable y     \ Y register (8\16 bit)
+variable dp    \ Direct Page (Zero Page) pointer (16 bit) 
+variable sp    \ Stack pointer (16 bit) 
+variable db-r  \ Data Bank register
+variable pb-r  \ Program Bank register
+
+
+\ Read next byte in stream
+
+
+\ ---- HARDWARE: FLAGS ----
+\ All flags are fully formed Forth flags (one cell large) 
+cr .( Setting up flag routines ... ) 
+
+variable n-flag   variable v-flag   variable m-flag
+variable x-flag   variable b-flag   variable d-flag 
+variable i-flag   variable z-flag   variable c-flag 
+variable e-flag 
+
+\ make code easier for humans
+: set?  ( addr -- f )  @ ;  
+: clear?  ( addr -- f )  @ invert ;
+: set  ( addr -- )  true swap ! ; 
+: clear  ( addr -- )  false swap ! ; 
+
+defer status-r
+
+\ construct status byte for emulation mode 
+: status-r8  ( -- u8 ) 
+   n-flag @  80 and 
+   v-flag @  40 and +
+\   bit 5 is empty 
+   b-flag @  10 and +
+   d-flag @  08 and +
+   i-flag @  04 and +
+   z-flag @  02 and +
+   c-flag @  01 and + ; 
+
+\ construct status byte for native mode
+: status-r16  ( -- u16 ) 
+   n-flag @  80 and 
+   v-flag @  40 and +
+   m-flag @  20 and +
+   x-flag @  10 and +
+   d-flag @  08 and +
+   i-flag @  04 and +
+   z-flag @  02 and +
+   c-flag @  01 and + ; 
 
 
 \ ---- OPCODE ROUTINES ----
@@ -113,7 +178,7 @@ cr .( Loading opcode routines ... )
 : opc-15 ( TODO )   ." 15 not coded yet" ; 
 : opc-16 ( TODO )   ." 16 not coded yet" ; 
 : opc-17 ( TODO )   ." 17 not coded yet" ; 
-: opc-18 ( clc )   ." 18 not coded yet" ; 
+: opc-18 ( clc )  c-flag clear ; 
 : opc-19 ( TODO )   ." 19 not coded yet" ; 
 : opc-1A ( TODO )   ." 1A not coded yet" ; 
 : opc-1B ( TODO )   ." 1B not coded yet" ; 
@@ -145,7 +210,7 @@ cr .( Loading opcode routines ... )
 : opc-35 ( TODO )   ." 35 not coded yet" ; 
 : opc-36 ( TODO )   ." 36 not coded yet" ; 
 : opc-37 ( TODO )   ." 37 not coded yet" ; 
-: opc-38 ( sec )   ." 38 not coded yet" ; 
+: opc-38 ( sec )  c-flag set ;  
 : opc-39 ( TODO )   ." 39 not coded yet" ; 
 : opc-3A ( TODO )   ." 3A not coded yet" ; 
 : opc-3B ( TODO )   ." 3B not coded yet" ; 
@@ -209,7 +274,7 @@ cr .( Loading opcode routines ... )
 : opc-75 ( TODO )   ." 75 not coded yet" ; 
 : opc-76 ( TODO )   ." 76 not coded yet" ; 
 : opc-77 ( TODO )   ." 77 not coded yet" ; 
-: opc-78 ( sei )   ." 78 not coded yet" ; 
+: opc-78 ( sei ) i-flag set ; 
 : opc-79 ( TODO )   ." 79 not coded yet" ; 
 : opc-7A ( ply )   ." 7A not coded yet" ; 
 : opc-7B ( TODO )   ." 7B not coded yet" ; 
@@ -230,8 +295,8 @@ cr .( Loading opcode routines ... )
 : opc-8A ( txa )   ." 8A not coded yet" ; 
 : opc-8B ( phb )   ." 8B not coded yet" ; 
 : opc-8C ( sty )   ." 8C not coded yet" ; 
-: opc-8D ( sta )   ." 8D not coded yet" ; 
-: opc-8E ( stx )   ." 8E not coded yet" ; 
+: opc-8D ( sta ) ( 65addr24 -- ) dup store.a pc+2 ; 
+: opc-8E ( stx ) ( 65addr24 -- ) x @ swap store.xy pc+2 ; 
 : opc-8F ( sta.l )   ." 8F not coded yet" ; 
 : opc-90 ( TODO )   ." 90 not coded yet" ; 
 : opc-91 ( TODO )   ." 91 not coded yet" ; 
@@ -273,7 +338,7 @@ cr .( Loading opcode routines ... )
 : opc-B5 ( TODO )   ." B5 not coded yet" ; 
 : opc-B6 ( TODO )   ." B6 not coded yet" ; 
 : opc-B7 ( TODO )   ." B7 not coded yet" ; 
-: opc-B8 ( clv )   ." B8 not coded yet" ; 
+: opc-B8 ( clv ) v-flag clear ; 
 : opc-B9 ( TODO )   ." B9 not coded yet" ; 
 : opc-BA ( tsx )   ." BA not coded yet" ; 
 : opc-BB ( tyx )   ." BB not coded yet" ; 
@@ -324,7 +389,7 @@ cr .( Loading opcode routines ... )
 : opc-E7 ( TODO )   ." E7 not coded yet" ; 
 : opc-E8 ( TODO )   ." E8 not coded yet" ; 
 : opc-E9 ( TODO )   ." E9 not coded yet" ; 
-: opc-EA ( nop )   ." EA not coded yet" ; 
+: opc-EA ( nop ) ; 
 : opc-EB ( xba )   ." EB not coded yet" ; 
 : opc-EC ( TODO )   ." EC not coded yet" ; 
 : opc-ED ( TODO )   ." ED not coded yet" ; 
@@ -338,7 +403,7 @@ cr .( Loading opcode routines ... )
 : opc-F5 ( TODO )   ." F5 not coded yet" ; 
 : opc-F6 ( TODO )   ." F6 not coded yet" ; 
 : opc-F7 ( TODO )   ." F7 not coded yet" ; 
-: opc-F8 ( sed )   ." F8 not coded yet" ; 
+: opc-F8 ( sed )  d-flag set ; 
 : opc-F9 ( TODO )   ." F9 not coded yet" ; 
 : opc-FA ( plx )   ." FA not coded yet" ; 
 : opc-FB ( xce )   ." FB not coded yet" ; 
@@ -360,6 +425,29 @@ cr .( Generating opcode jump table ... )
    loop ;
 
 create opc-jumptable   make-opc-jumptable 
+
+
+\ ---- MODE SWITCHES ----
+
+\ switch processor modes (native/emulated) 
+: native ( -- )
+   ['] status-r16 is status-r ; 
+: emulated ( -- ) 
+   ['] status-r8 is status-r ; 
+
+
+\ switch accumulator 8<->16 bit 
+: a16  ( -- ) 
+   ['] fetch16 is fetch.a ; 
+: a8 ( -- ) 
+   ['] fetch8 is fetch.a ; 
+
+
+\ switch X and Y 8<->16 bit
+: xy16  ( -- )
+   ['] fetch16 is fetch.xy ; 
+: xy8 ( -- ) 
+   ['] fetch8 is fetch.xy ; 
 
 
 \ ---- START EMULATION ----

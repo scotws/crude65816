@@ -1,7 +1,7 @@
 Manual for The Crude 65816 Emulator 
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 09. Jan 2015
-This version: 22. Jan 2015
+This version: 18. April 2015
 
 
 GUIDELINES
@@ -38,7 +38,7 @@ NAMES OF MODES
     dp indirect y indexed     lda ($10),y         10 lda.diy  
     dp indirect long y index  lda [$10],y         10 lda.dily (65816)
     relative                  bne $2000         2000 bne
-    relative long             brl $200000      20000 brl      (65816)
+    relative long             brl $200000     200000 brl      (65816)
     stack relative            lda 3,S              3 lda.s    (65816)
     stack rel ind y indexed   lda (3,S),y          3 lda.siy  (65816)
     block move                mvp 0,0            0 0 mvp      (65816) 

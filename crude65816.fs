@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 22. Jan 2015
+\ This version: 03. April 2015
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -21,10 +21,10 @@ cr .( The Crude 65816 Emulator Version pre-ALPHA)
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
-hex
 
 \ ---- DEFINITIONS ----
 cr .( Defining things ...)
+hex
 
     400 constant 1k       1k 8 * constant 8k     8k 2* constant 16k
 16k 8 * constant 64k   64k 100 * constant 16M    64k constant bank 
@@ -99,16 +99,20 @@ defer store.xy
 \ ---- HARDWARE: CPU ----
 cr .( Setting up CPU ... ) 
 
-variable pc    \ program counter (16 bit) 
-variable x     \ X register (8\16 bit)
-variable y     \ Y register (8\16 bit)
-variable dp    \ Direct Page (Zero Page) pointer (16 bit) 
-variable sp    \ Stack pointer (16 bit) 
-variable db-r  \ Data Bank register
-variable pb-r  \ Program Bank register
+\ Names follow the convention from the WDC data sheet
+\ Note the Accumulator (A/B/C) is top of stack 
+variable PC    \ program counter (16 bit) 
+variable X     \ X register (8\16 bit)
+variable Y     \ Y register (8\16 bit)
+variable D     \ Direct register (Zero Page) (16 bit) 
+variable P     \ Processor Status Register (8 bit)
+variable S     \ Stack Pointer (8/16 bit)
+variable DBR   \ Data Bank register (8 bit)
+variable PBR   \ Program Bank register (8 bit)
 
 
 \ Read next byte in stream
+\ TODO 
 
 
 \ ---- HARDWARE: FLAGS ----
@@ -120,7 +124,7 @@ variable x-flag   variable b-flag   variable d-flag
 variable i-flag   variable z-flag   variable c-flag 
 variable e-flag 
 
-\ make code easier for humans
+\ make flag code easier for humans
 : set?  ( addr -- f )  @ ;  
 : clear?  ( addr -- f )  @ invert ;
 : set  ( addr -- )  true swap ! ; 
@@ -227,6 +231,7 @@ cr .( Loading opcode routines ... )
 : opc-46 ( TODO )   ." 46 not coded yet" ; 
 : opc-47 ( TODO )   ." 47 not coded yet" ; 
 : opc-48 ( pha )   ." 48 not coded yet" ; 
+   \ TODO note 8/16 bit difference
 : opc-49 ( eor.# )   ." 49 not coded yet" ; 
 : opc-4A ( TODO )   ." 4A not coded yet" ; 
 : opc-4B ( phk )   ." 4B not coded yet" ; 
@@ -428,30 +433,42 @@ create opc-jumptable   make-opc-jumptable
 
 
 \ ---- MODE SWITCHES ----
-
-\ switch processor modes (native/emulated) 
-: native ( -- )
-   ['] status-r16 is status-r ; 
-: emulated ( -- ) 
-   ['] status-r8 is status-r ; 
-
+\ See page 61 in the manual
 
 \ switch accumulator 8<->16 bit 
-: a16  ( -- ) 
-   ['] fetch16 is fetch.a ; 
-: a8 ( -- ) 
-   ['] fetch8 is fetch.a ; 
-
+: a16  ( -- )  ['] fetch16 is fetch.a ; 
+: a8 ( -- )  ['] fetch8 is fetch.a ; 
 
 \ switch X and Y 8<->16 bit
-: xy16  ( -- )
+: xy16  ( -- )  
    ['] fetch16 is fetch.xy ; 
-: xy8 ( -- ) 
+   \ TODO set high byte of X and Y to zero
+
+: xy8 ( -- )  
    ['] fetch8 is fetch.xy ; 
+   \ TODO set high byte of X and Y to zero
+
+\ switch processor modes (native/emulated) 
+: go-native ( -- )  ['] status-r16 is status-r ; 
+   \ TODO set stack pointer to 16 bits
+   \ TODO set direct page to 16 zero page
+   \ TODO handle status flags
+
+: go-emulated ( -- )  
+   ['] status-r8 is status-r ; 
+   \ TODO set stack pointer to 8 bits 
+   \ TODO set direct page to 8 zero page
+   \ TODO set PBR to zero 
+   \ TODO set DBR to zero 
+   \ TODO handle status flags
 
 
 \ ---- START EMULATION ----
 cr .( Starting emulation ...) 
+
+\ We start in emulation mode 
+go-emulated 
+
 
 \ TODO set emulation mode 
 \ TODO get jump vector 

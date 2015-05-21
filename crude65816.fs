@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 03. April 2015
+\ This version: 21. May 2015  
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -107,8 +107,8 @@ variable Y     \ Y register (8\16 bit)
 variable D     \ Direct register (Zero Page) (16 bit) 
 variable P     \ Processor Status Register (8 bit)
 variable S     \ Stack Pointer (8/16 bit)
-variable DBR   \ Data Bank register (8 bit)
-variable PBR   \ Program Bank register (8 bit)
+variable DBR   \ Data Bank register ("B") (8 bit)
+variable PBR   \ Program Bank register ("K") (8 bit)
 
 
 \ Read next byte in stream
@@ -136,7 +136,7 @@ defer status-r
 : status-r8  ( -- u8 ) 
    n-flag @  80 and 
    v-flag @  40 and +
-\   bit 5 is empty 
+\   bit 5 is empty TODO see if needs to be set to zero 
    b-flag @  10 and +
    d-flag @  08 and +
    i-flag @  04 and +
@@ -144,7 +144,7 @@ defer status-r
    c-flag @  01 and + ; 
 
 \ construct status byte for native mode
-: status-r16  ( -- u16 ) 
+: status-r16  ( -- u8 ) 
    n-flag @  80 and 
    v-flag @  40 and +
    m-flag @  20 and +
@@ -154,7 +154,32 @@ defer status-r
    z-flag @  02 and +
    c-flag @  01 and + ; 
 
+\ ---- OUTPUT FUNCTIONS ----
 
+\ Print byte as bits, does not add space, returns as HEX
+: .8bits ( u -- ) 
+   2 base !  s>d <# # # # # # # # # #> type  hex ; 
+
+\ Format number to four places, assumes HEX
+: .mask16 ( n -- addr u )
+   s>d <# # # # # #> type space ; 
+
+\ Format number to two places, assumes HEX 
+: .mask8 ( n -- addr u )
+   s>d <# # # #> type space ; 
+
+\ Print state of machine 
+: .state ( -- )
+   cr  e-flag set? if
+      ."  PC   K   A    X    Y    S    D   B NV-BDIZC" else
+      ."  PC   K   A    X    Y    S    D   B NVMXDIZC" then
+ \ cr ." xxxx xx xxxx xxxx xxxx xxxx xxxx xx xxxxxxxx" 
+   cr 
+   PC @ .mask16   PBR @ .mask8   dup .mask16   X @ .mask16 
+   Y @ .mask16    S @ .mask16    D @ .mask16   DBR @ .mask8
+   status-r .8bits  space 
+   e-flag set? if ." emulated" else ." native" then  cr ; 
+   
 \ ---- OPCODE ROUTINES ----
 cr .( Loading opcode routines ... ) 
 
@@ -435,33 +460,43 @@ create opc-jumptable   make-opc-jumptable
 \ ---- MODE SWITCHES ----
 \ See page 61 in the manual
 
-\ switch accumulator 8<->16 bit 
-: a16  ( -- )  ['] fetch16 is fetch.a ; 
-: a8 ( -- )  ['] fetch8 is fetch.a ; 
+\ Switch accumulator 8<->16 bit (p. 51)
+\ Remember A is TOS 
+: a->16  ( -- )  
+   ['] fetch16 is fetch.a 
+   m-flag clear ; 
 
-\ switch X and Y 8<->16 bit
-: xy16  ( -- )  
-   ['] fetch16 is fetch.xy ; 
-   \ TODO set high byte of X and Y to zero
+: a->8 ( -- )  
+   ['] fetch8 is fetch.a 
+   m-flag set ;
 
-: xy8 ( -- )  
-   ['] fetch8 is fetch.xy ; 
-   \ TODO set high byte of X and Y to zero
+\ Switch X and Y 8<->16 bit (p. 51) 
+: xy->16  ( -- )  
+   ['] fetch16 is fetch.xy 
+   X @  00FF AND  X !   Y @  00FF AND  Y !  \ paranoid
+   x-flag clear ; 
+
+: xy->8 ( -- )  
+   ['] fetch8 is fetch.xy
+   X @  00FF AND  X !   Y @  00FF AND  Y !  
+   x-flag set ; 
 
 \ switch processor modes (native/emulated) 
-: go-native ( -- )  ['] status-r16 is status-r ; 
+: go-native ( -- )  
+   e-flag clear
+   ['] status-r16 is status-r 
+
    \ TODO set stack pointer to 16 bits
    \ TODO set direct page to 16 zero page
-   \ TODO handle status flags
+   ; 
 
 : go-emulated ( -- )  
-   ['] status-r8 is status-r ; 
-   \ TODO set stack pointer to 8 bits 
+   ['] status-r8 is status-r 
+   e-flag set  a->8  xy->8  
+   S @  00FF AND  0100 OR  S ! 
    \ TODO set direct page to 8 zero page
-   \ TODO set PBR to zero 
-   \ TODO set DBR to zero 
-   \ TODO handle status flags
-
+   \ TODO clear b-flag ?
+   ; 
 
 \ ---- START EMULATION ----
 cr .( Starting emulation ...) 

@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 21. May 2015  
+\ This version: 25. May 2015  
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -17,7 +17,8 @@
 \ You should have received a copy of the GNU General Public License
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-cr .( The Crude 65816 Emulator Version pre-ALPHA) 
+cr .( The Crude 65816 Emulator in Forth)
+cr .( Version pre-ALPHA  25. May 2015) 
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -28,72 +29,6 @@ hex
 
     400 constant 1k       1k 8 * constant 8k     8k 2* constant 16k
 16k 8 * constant 64k   64k 100 * constant 16M    64k constant bank 
-
-
-
-
-\ ---- VARIABLES ----
-
-variable PC       \ Program Counter of CPU 
-
-
-
-\ ---- HELPER FUNCTIONS ----
-
-\ mask addresses
-: mask8 ( u -- u8 ) 0ff and ; 
-: mask16 ( u -- u16 ) 0ffff and ; 
-: mask24 ( u -- u24 ) 0ffffff and ; 
-
-\ return least or most significant byte of 16-bit number
-: lsb ( u16 -- u8 )  mask8 ;
-: msb ( u16 -- u8 )  0ff00 and  8 rshift ;
-
-\ convert 16 bit address to little-endian
-: swapbytes ( u16 -- u8h u8l )  dup msb swap lsb ;
-
-\ handle Program Counter
-: PC+u ( u -- ) ( -- )   
-   create ,
-   does> @ PC +! ;
-
-1 PC+u PC+1   2 PC+u PC+2   3 PC+u PC+3
-
-
-\ ---- HARDWARE: MEMORY ----
-cr .( Setting up Memory ...) 
-
-\ We just allot the whole possible memory range. Note that this will fail
-\ unless you called Gforth with "-m 1G" or something of that size like you
-\ were told in the MANUAL.txt
-create memory 16M allot
-
-: loadrom ( 65addr24 addr u -- )
-   r/o open-file drop            ( 65addr fileid ) 
-   slurp-fid                     ( 65addr addr u ) 
-   rot  memory +  swap           ( addr 65addrROM u ) 
-   move ;  
-
-\ load ROM files into memory
-\ TODO close file when done
-include config.fs  
-
-
-\ all accesses to memory are full 24 bit
-: mem16>24  ( u8 65addr16 -- 65addr24) ; 
-: mem8>24  ( u8 u8 u8 -- 65addr24) ; 
-
-
-\ Routines for fetching and storing memory
-defer fetch.a
-defer fetch.xy
-: fetch8  ( 65addr24 -- u8 ) ; 
-: fetch16  ( 65addr24 -- u16 ) ; 
-
-defer store.a
-defer store.xy
-: store8 ( u8 65addr24 -- ) ; 
-: store16 ( u16 65addr24 -- ) ; 
 
 
 \ ---- HARDWARE: CPU ----
@@ -111,11 +46,73 @@ variable DBR   \ Data Bank register ("B") (8 bit)
 variable PBR   \ Program Bank register ("K") (8 bit)
 
 
+\ ---- HELPER FUNCTIONS ----
+
+\ mask addresses
+: mask8 ( u -- u8 ) 0ff and ; 
+: mask16 ( u -- u16 ) 0ffff and ; 
+: mask24 ( u -- u24 ) 0ffffff and ; 
+
+\ return least or most significant byte of 16-bit number
+: lsb ( u16 -- u8 )  mask8 ;
+: msb ( u16 -- u8 )  0ff00 and  8 rshift ;
+
+\ 16 bit addresses and endian conversion. Assumes MSB is TOS 
+: 16>lsb/msb ( u16 -- lsb msb  )  dup lsb swap msb ; 
+: lsb/msb>16 ( lsb msb -- u16 )  8 lshift or ; 
+
+\ handle Program Counter
+: PC+u ( u -- ) ( -- )   
+   create ,
+   does> @ PC +! ;
+
+1 PC+u PC+1   2 PC+u PC+2   3 PC+u PC+3
+
+
+\ ---- MEMORY ----
+\ All accesses to memory are always full 24 bit. Stack follows little-endian
+\ format with bank on top, then msb and lsb
+cr .( Setting up Memory ...) 
+
+\ We just allot the whole possible memory range. Note that this will fail
+\ unless you called Gforth with "-m 1G" or something of that size like you
+\ were told in the MANUAL.txt
+create memory 16M allot
+
+: loadrom ( 65addr24 addr u -- )
+   r/o open-file drop            ( 65addr fileid ) 
+   slurp-fid                     ( 65addr addr u ) 
+   rot  memory +  swap           ( addr 65addrROM u ) 
+   move ;  
+
+\ load ROM files into memory
+include config.fs  
+
+\ Convert various combinations to full 24 bit address. Assumes HEX 
+: mem16>24  ( 65addr16 bank -- 65addr24 )  10 lshift or ; 
+: mem8>24  ( lsb msb bank -- 65addr24 )  -rot lsb/msb>16 swap mem16>24 ; 
+
+\ Fetch from memory 
+defer fetch.a   defer fetch.xy
+
+\ Get one byte or double byte out of memory. Double bytes assume 
+\ little-endian storage in memory but returns it to the Forth data 
+\ stack in "normal" big endian format
+: fetch8  ( 65addr24 -- u8 )  memory +  c@ ; 
+: fetch16  ( 65addr24 -- u16 )  dup fetch8  swap 1+  fetch8  lsb/msb>16 ; 
+
+\ Store to memory 
+defer store.a   defer store.xy
+
+: store8 ( u8 65addr24 -- ) memory +  c! ;
+: store16 ( u16 65addr24 -- ) \ store LSB first
+   2dup swap lsb swap store8  swap msb swap 1+ store8 ; 
+
 \ Read next byte in stream
 \ TODO 
 
 
-\ ---- HARDWARE: FLAGS ----
+\ ---- FLAGS ----
 \ All flags are fully formed Forth flags (one cell large) 
 cr .( Setting up flag routines ... ) 
 
@@ -154,6 +151,7 @@ defer status-r
    z-flag @  02 and +
    c-flag @  01 and + ; 
 
+
 \ ---- OUTPUT FUNCTIONS ----
 
 \ Print byte as bits, does not add space, returns as HEX
@@ -187,15 +185,15 @@ cr .( Loading opcode routines ... )
 : opc-01 ( ora.dxi )   ." 01 not coded yet" ; 
 : opc-02 ( cop )   ." 02 not coded yet" ; 
 : opc-03 ( ora.s )   ." 03 not coded yet" ; 
-: opc-04 ( TODO )   ." 04 not coded yet" ; 
+: opc-04 ( tsb.d )  ." 04 not coded yet" ; 
 : opc-05 ( ora.d )   ." 05 not coded yet" ; 
 : opc-06 ( asl.d )  ." 06 not coded yet" ; 
 : opc-07 ( ora.dil )   ." 07 not coded yet" ; 
-: opc-08 ( TODO )   ." 08 not coded yet" ; 
+: opc-08 ( php )   ." 08 not coded yet" ; 
 : opc-09 ( ora.# )   ." 09 not coded yet" ; 
 : opc-0A ( asl.a )   ." 0A not coded yet" ; 
 : opc-0B ( phd )   ." 0B not coded yet" ; 
-: opc-0C ( TODO )   ." 0C not coded yet" ; 
+: opc-0C ( tsb )   ." 0C not coded yet" ; 
 : opc-0D ( ora )   ." 0D not coded yet" ; 
 : opc-0E ( asl )   ." 0E not coded yet" ; 
 : opc-0F ( ora.l )   ." 0F not coded yet" ; 
@@ -203,15 +201,15 @@ cr .( Loading opcode routines ... )
 : opc-11 ( ora.diy )   ." 11 not coded yet" ; 
 : opc-12 ( ora.di )   ." 12 not coded yet" ; 
 : opc-13 ( ora.siy )   ." 13 not coded yet" ; 
-: opc-14 ( TODO )   ." 14 not coded yet" ; 
+: opc-14 ( trb.d )   ." 14 not coded yet" ; 
 : opc-15 ( ora.dx )   ." 15 not coded yet" ; 
 : opc-16 ( asl.dx )   ." 16 not coded yet" ; 
 : opc-17 ( ora.dily )   ." 17 not coded yet" ; 
 : opc-18 ( clc )  c-flag clear ; 
 : opc-19 ( ora.y )   ." 19 not coded yet" ; 
 : opc-1A ( inc.a )   ." 1A not coded yet" ; 
-: opc-1B ( TODO )   ." 1B not coded yet" ; 
-: opc-1C ( TODO )   ." 1C not coded yet" ; 
+: opc-1B ( tcs )   ." 1B not coded yet" ; 
+: opc-1C ( trb )   ." 1C not coded yet" ; 
 : opc-1D ( ora.x )   ." 1D not coded yet" ; 
 : opc-1E ( asl.x )   ." 1E not coded yet" ; 
 : opc-1F ( ora.lx )   ." 1F not coded yet" ; 
@@ -229,7 +227,7 @@ cr .( Loading opcode routines ... )
 : opc-2B ( pld )   ." 2B not coded yet" ; 
 : opc-2C ( bit )   ." 2C not coded yet" ; 
 : opc-2D ( and )   ." 2D not coded yet" ; 
-: opc-2E ( TODO )   ." 2E not coded yet" ; 
+: opc-2E ( rol )   ." 2E not coded yet" ; 
 : opc-2F ( and.l )   ." 2F not coded yet" ; 
 : opc-30 ( bmi )   ." 30 not coded yet" ; 
 : opc-31 ( and.diy )   ." 31 not coded yet" ; 
@@ -237,15 +235,15 @@ cr .( Loading opcode routines ... )
 : opc-33 ( and.siy )   ." 33 not coded yet" ; 
 : opc-34 ( bit.dx )   ." 34 not coded yet" ; 
 : opc-35 ( and.dx )   ." 35 not coded yet" ; 
-: opc-36 ( TODO )   ." 36 not coded yet" ; 
+: opc-36 ( rol.dx )   ." 36 not coded yet" ; 
 : opc-37 ( and.dy )   ." 37 not coded yet" ; 
 : opc-38 ( sec )  c-flag set ;  
 : opc-39 ( and.y )   ." 39 not coded yet" ; 
 : opc-3A ( dec.a )   ." 3A not coded yet" ; 
-: opc-3B ( TODO )   ." 3B not coded yet" ; 
+: opc-3B ( tsc )   ." 3B not coded yet" ; 
 : opc-3C ( bit.x )   ." 3C not coded yet" ; 
 : opc-3D ( and.x )   ." 3D not coded yet" ; 
-: opc-3E ( TODO )   ." 3E not coded yet" ; 
+: opc-3E ( rol.x )   ." 3E not coded yet" ; 
 : opc-3F ( and.lx )   ." 3F not coded yet" ; 
 : opc-40 ( rti )   ." 40 not coded yet" ; 
 : opc-41 ( eor.dxi )   ." 41 not coded yet" ; 
@@ -256,7 +254,6 @@ cr .( Loading opcode routines ... )
 : opc-46 ( lsr.d )   ." 46 not coded yet" ; 
 : opc-47 ( eor.dil )   ." 47 not coded yet" ; 
 : opc-48 ( pha )   ." 48 not coded yet" ; 
-   \ TODO note 8/16 bit difference
 : opc-49 ( eor.# )   ." 49 not coded yet" ; 
 : opc-4A ( lsr.a )   ." 4A not coded yet" ; 
 : opc-4B ( phk )   ." 4B not coded yet" ; 
@@ -275,7 +272,7 @@ cr .( Loading opcode routines ... )
 : opc-58 ( cli )  i-flag clear ;  
 : opc-59 ( eor.y )   ." 59 not coded yet" ; 
 : opc-5A ( phy )   ." 5A not coded yet" ; 
-: opc-5B ( TODO )   ." 5B not coded yet" ; 
+: opc-5B ( tcd )   ." 5B not coded yet" ; 
 : opc-5C ( jmp.l )   ." 5C not coded yet" ; 
 : opc-5D ( eor.dx )   ." 5D not coded yet" ; 
 : opc-5E ( lsr.x )   ." 5E not coded yet" ; 
@@ -286,15 +283,15 @@ cr .( Loading opcode routines ... )
 : opc-63 ( adc.s )   ." 63 not coded yet" ; 
 : opc-64 ( stz.d )   ." 64 not coded yet" ; 
 : opc-65 ( adc.d )   ." 65 not coded yet" ; 
-: opc-66 ( TODO )   ." 66 not coded yet" ; 
+: opc-66 ( ror.d )   ." 66 not coded yet" ; 
 : opc-67 ( adc.dil )   ." 67 not coded yet" ; 
 : opc-68 ( pla )   ." 68 not coded yet" ; 
 : opc-69 ( adc.# )   ." 69 not coded yet" ; 
-: opc-6A ( TODO )   ." 6A not coded yet" ; 
+: opc-6A ( ror.a )   ." 6A not coded yet" ; 
 : opc-6B ( rtl )   ." 6B not coded yet" ; 
 : opc-6C ( jmp.i )   ." 6C not coded yet" ; 
 : opc-6D ( adc )   ." 6D not coded yet" ; 
-: opc-6E ( TODO )   ." 6E not coded yet" ; 
+: opc-6E ( ror )   ." 6E not coded yet" ; 
 : opc-6F ( adc.l )   ." 6F not coded yet" ; 
 : opc-70 ( bvs )   ." 70 not coded yet" ; 
 : opc-71 ( adc.diy )   ." 71 not coded yet" ; 
@@ -302,48 +299,48 @@ cr .( Loading opcode routines ... )
 : opc-73 ( adc.siy )   ." 73 not coded yet" ; 
 : opc-74 ( stx.dx )   ." 74 not coded yet" ; 
 : opc-75 ( adc.dx)   ." 75 not coded yet" ; 
-: opc-76 ( TODO )   ." 76 not coded yet" ; 
+: opc-76 ( ror.dx )   ." 76 not coded yet" ; 
 : opc-77 ( adc.dy )   ." 77 not coded yet" ; 
 : opc-78 ( sei ) i-flag set ; 
 : opc-79 ( adc.y )   ." 79 not coded yet" ; 
 : opc-7A ( ply )   ." 7A not coded yet" ; 
-: opc-7B ( TODO )   ." 7B not coded yet" ; 
+: opc-7B ( tdc )   ." 7B not coded yet" ; 
 : opc-7C ( jmp.xi )   ." 7C not coded yet" ; 
 : opc-7D ( adc.x )   ." 7D not coded yet" ; 
-: opc-7E ( TODO )   ." 7E not coded yet" ; 
+: opc-7E ( ror.x )   ." 7E not coded yet" ; 
 : opc-7F ( adc.lx )   ." 7F not coded yet" ; 
 : opc-80 ( bra )   ." 80 not coded yet" ; 
-: opc-81 ( TODO )   ." 81 not coded yet" ; 
+: opc-81 ( sta.dxi )   ." 81 not coded yet" ; \ CHECK OPCODE
 : opc-82 ( brl )   ." 82 not coded yet" ; 
 : opc-83 ( sta.s )   ." 83 not coded yet" ; 
-: opc-84 ( TODO )   ." 84 not coded yet" ; 
-: opc-85 ( TODO )   ." 85 not coded yet" ; 
-: opc-86 ( TODO )   ." 86 not coded yet" ; 
-: opc-87 ( TODO )   ." 87 not coded yet" ; 
+: opc-84 ( sty.d )   ." 84 not coded yet" ; 
+: opc-85 ( sta.d )   ." 85 not coded yet" ; 
+: opc-86 ( stx.d )   ." 86 not coded yet" ; 
+: opc-87 ( sta.dil )   ." 87 not coded yet" ; 
 : opc-88 ( dey )   ." 88 not coded yet" ; 
 : opc-89 ( bit.# )   ." 89 not coded yet" ; 
 : opc-8A ( txa )   ." 8A not coded yet" ; 
 : opc-8B ( phb )   ." 8B not coded yet" ; 
 : opc-8C ( sty )   ." 8C not coded yet" ; 
-: opc-8D ( sta ) ( 65addr24 -- ) dup store.a pc+2 ; 
-: opc-8E ( stx ) ( 65addr24 -- ) x @ swap store.xy pc+2 ; 
+: opc-8D ( sta ) ." 8D not coded yet" ; 
+: opc-8E ( stx ) ." 8E not coded yet" ; 
 : opc-8F ( sta.l )   ." 8F not coded yet" ; 
 : opc-90 ( bcc )   ." 90 not coded yet" ; 
-: opc-91 ( TODO )   ." 91 not coded yet" ; 
-: opc-92 ( TODO )   ." 92 not coded yet" ; 
-: opc-93 ( TODO )   ." 93 not coded yet" ; 
-: opc-94 ( TODO )   ." 94 not coded yet" ; 
-: opc-95 ( TODO )   ." 95 not coded yet" ; 
-: opc-96 ( TODO )   ." 96 not coded yet" ; 
-: opc-97 ( TODO )   ." 97 not coded yet" ; 
-: opc-98 ( TODO )   ." 98 not coded yet" ; 
-: opc-99 ( TODO )   ." 99 not coded yet" ; 
-: opc-9A ( TODO )   ." 9A not coded yet" ; 
-: opc-9B ( TODO )   ." 9B not coded yet" ; 
+: opc-91 ( sta.diy )   ." 91 not coded yet" ; 
+: opc-92 ( sta.di )   ." 92 not coded yet" ; 
+: opc-93 ( sta.siy )   ." 93 not coded yet" ; 
+: opc-94 ( sty.dx )   ." 94 not coded yet" ; 
+: opc-95 ( sta.dx )   ." 95 not coded yet" ; 
+: opc-96 ( stx.dy )   ." 96 not coded yet" ; 
+: opc-97 ( sta.dily )   ." 97 not coded yet" ; 
+: opc-98 ( tya )   ." 98 not coded yet" ; 
+: opc-99 ( sta.y )   ." 99 not coded yet" ; 
+: opc-9A ( txs )   ." 9A not coded yet" ; 
+: opc-9B ( txy )   ." 9B not coded yet" ; 
 : opc-9C ( stz )   ." 9C not coded yet" ; 
-: opc-9D ( TODO )   ." 9D not coded yet" ; 
-: opc-9E ( TODO )   ." 9E not coded yet" ; 
-: opc-9F ( TODO )   ." 9F not coded yet" ; 
+: opc-9D ( sta.x )   ." 9D not coded yet" ; 
+: opc-9E ( stz.x )   ." 9E not coded yet" ; 
+: opc-9F ( sta.lx )   ." 9F not coded yet" ; 
 : opc-A0 ( ldy.# )   ." A0 not coded yet" ; 
 : opc-A1 ( lda.dxi )   ." A1 not coded yet" ; 
 : opc-A2 ( ldx.# )   ." A2 not coded yet" ; 
@@ -352,9 +349,9 @@ cr .( Loading opcode routines ... )
 : opc-A5 ( lda.d )   ." A5 not coded yet" ; 
 : opc-A6 ( ldx.d )   ." A6 not coded yet" ; 
 : opc-A7 ( lda.dil )   ." A7 not coded yet" ; 
-: opc-A8 ( TODO )   ." A8 not coded yet" ; 
+: opc-A8 ( tay )   ." A8 not coded yet" ; 
 : opc-A9 ( lda.# )   ." A9 not coded yet" ; 
-: opc-AA ( TODO )   ." AA not coded yet" ; 
+: opc-AA ( tax )   ." AA not coded yet" ; 
 : opc-AB ( plb )   ." AB not coded yet" ; 
 : opc-AC ( ldy )   ." AC not coded yet" ; 
 : opc-AD ( lda )   ." AD not coded yet" ; 
@@ -387,7 +384,7 @@ cr .( Loading opcode routines ... )
 : opc-C8 ( iny )   ." C8 not coded yet" ; 
 : opc-C9 ( cmp.# )   ." C9 not coded yet" ; 
 : opc-CA ( dex )   ." dex not coded yet" ; 
-: opc-CB ( TODO )   ." CB not coded yet" ; 
+: opc-CB ( wai )   ." CB not coded yet" ; 
 : opc-CC ( cpy )   ." CC not coded yet" ; 
 : opc-CD ( cmp )   ." CD not coded yet" ; 
 : opc-CE ( dec )   ." dec not coded yet" ; 
@@ -403,44 +400,43 @@ cr .( Loading opcode routines ... )
 : opc-D8 ( cld )  d-flag clear ;  
 : opc-D9 ( cmp.y )   ." D9 not coded yet" ; 
 : opc-DA ( phx )   ." DA not coded yet" ; 
-: opc-DB ( stp )   \ Stop the Processor, halts emulation
-   ." stp not coded yet" ; 
+: opc-DB ( stp )   ." DB not coded yet" ; \ halts emulation
 : opc-DC ( jmp.il )   ." DC not coded yet" ; 
 : opc-DD ( cmp.x )   ." DD not coded yet" ; 
 : opc-DE ( dec.x )   ." DE not coded yet" ; 
 : opc-DF ( cmp.lx )   ." DF not coded yet" ; 
 : opc-E0 ( cpx.# )   ." E0 not coded yet" ; 
-: opc-E1 ( TODO )   ." E1 not coded yet" ; 
-: opc-E2 ( sep.# )   ." E2 not coded yet" ; 
-: opc-E3 ( TODO )   ." E3 not coded yet" ; 
+: opc-E1 ( sbc.dxi )  ." E1 not coded yet" ; 
+: opc-E2 ( cpx.# )   ." E2 not coded yet" ; 
+: opc-E3 ( sbc.s )   ." E3 not coded yet" ; 
 : opc-E4 ( cpx.d )   ." E4 not coded yet" ; 
-: opc-E5 ( TODO )   ." E5 not coded yet" ; 
+: opc-E5 ( sbc.d )   ." E5 not coded yet" ; 
 : opc-E6 ( inc.d )   ." E6 not coded yet" ; 
-: opc-E7 ( TODO )   ." E7 not coded yet" ; 
+: opc-E7 ( sbc.dil )   ." E7 not coded yet" ; 
 : opc-E8 ( inx )   ." E8 not coded yet" ; 
-: opc-E9 ( TODO )   ." E9 not coded yet" ; 
+: opc-E9 ( sbc.# )   ." E9 not coded yet" ; 
 : opc-EA ( nop ) ." NOP not coded yet" ; 
 : opc-EB ( xba )   ." EB not coded yet" ; 
 : opc-EC ( cpx )   ." EC not coded yet" ; 
-: opc-ED ( TODO )   ." ED not coded yet" ; 
+: opc-ED ( sbc )   ." ED not coded yet" ; 
 : opc-EE ( inc )   ." EE not coded yet" ; 
 : opc-EF ( sbc.l )   ." EF not coded yet" ; 
 : opc-F0 ( beq )   ." F0 not coded yet" ; 
-: opc-F1 ( TODO )   ." F1 not coded yet" ; 
-: opc-F2 ( TODO )   ." F2 not coded yet" ; 
-: opc-F3 ( TODO )   ." F3 not coded yet" ; 
+: opc-F1 ( sbc.diy )   ." F1 not coded yet" ; 
+: opc-F2 ( sbc.di )   ." F2 not coded yet" ; 
+: opc-F3 ( sbc.siy )   ." F3 not coded yet" ; 
 : opc-F4 ( pea )   ." F4 not coded yet" ; 
-: opc-F5 ( TODO )   ." F5 not coded yet" ; 
+: opc-F5 ( sbc.dx )   ." F5 not coded yet" ; 
 : opc-F6 ( inc.dx )   ." F6 not coded yet" ; 
-: opc-F7 ( TODO )   ." F7 not coded yet" ; 
+: opc-F7 ( sbc.dily )   ." F7 not coded yet" ; 
 : opc-F8 ( sed )  d-flag set ; 
-: opc-F9 ( TODO )   ." F9 not coded yet" ; 
+: opc-F9 ( sbc.y )   ." F9 not coded yet" ; 
 : opc-FA ( plx )   ." FA not coded yet" ; 
 : opc-FB ( xce )   ." FB not coded yet" ; 
 : opc-FC ( jsr.xi )   ." FC not coded yet" ; 
-: opc-FD ( TODO )   ." FD not coded yet" ; 
+: opc-FD ( sbc.x )   ." FD not coded yet" ; 
 : opc-FE ( inc.x )   ." FE not coded yet" ; 
-: opc-FF ( TODO )   ." FF not coded yet" ; 
+: opc-FF ( sbc.lx )   ." FF not coded yet" ; 
 
 
 \ ---- GENERATE OPCODE JUMP TABLE ----
@@ -464,20 +460,24 @@ create opc-jumptable   make-opc-jumptable
 \ Remember A is TOS 
 : a->16  ( -- )  
    ['] fetch16 is fetch.a 
+   ['] store16 is store.a
    m-flag clear ; 
 
 : a->8 ( -- )  
    ['] fetch8 is fetch.a 
+   ['] store8 is store.a
    m-flag set ;
 
 \ Switch X and Y 8<->16 bit (p. 51) 
 : xy->16  ( -- )  
    ['] fetch16 is fetch.xy 
+   ['] store16 is store.xy
    X @  00FF AND  X !   Y @  00FF AND  Y !  \ paranoid
    x-flag clear ; 
 
 : xy->8 ( -- )  
    ['] fetch8 is fetch.xy
+   ['] store8 is store.xy
    X @  00FF AND  X !   Y @  00FF AND  Y !  
    x-flag set ; 
 
@@ -492,23 +492,55 @@ create opc-jumptable   make-opc-jumptable
 
 : go-emulated ( -- )  
    ['] status-r8 is status-r 
-   e-flag set  a->8  xy->8  
-   S @  00FF AND  0100 OR  S ! 
+   a->8   xy->8  
+   e-flag set   
+   S @  00FF AND  0100 OR  S ! \ stack pointer to 0100
    \ TODO set direct page to 8 zero page
    \ TODO clear b-flag ?
+   \ TODO PBR and DBR ?
+   \ TODO D-Flag?
    ; 
 
+\ ---- INTERRUPTS ---- 
+\ All vectors are 16 bit, access with fetch16 when given full 24 bit address
+\ n in name is for native mode, e is for emulated mode
+cr .( Setting up interrupts ...)
+
+0ffe4 constant cop-n-v
+0ffe6 constant brk-n-v  \ no such vector in emulated mode
+0ffe8 constant abort-n-v  
+0ffea constant nmi-n-v
+0ffee constant irq-n-v
+
+0fff4 constant cop-e-v
+0fff8 constant abort-e-v  
+0fffa constant nmi-e-v
+0fffc constant reset-v   \ same for emulated and native
+0fffe constant irq-e-v
+
+: reset-i ( -- ) 
+   go-emulated
+   00 \ TOS is A
+   \ TODO FLAGS?
+   00 X !   00 Y !  00 PBR !  00 DBR ! 
+   reset-v fetch16  PC ! ; 
+
+: irq-i ( -- ) ." IRQ routine not programmed yet" ; \ TODO 
+: nmi-i ( -- ) ." NMI routine not programmed yet" ; \ TODO 
+: abort-i ( -- ) ." ABORT routine not programmed yet" ; \ TODO 
+: brk-i ( -- ) ." BREAK routine not programmed yet" ; \ TODO 
+: cop-i ( -- ) ." COP routine not programmed yet" ; \ TODO 
+
+
 \ ---- START EMULATION ----
+\ Note that A is TOS, but we don't include this in the stack comments because
+\ it would drive us nuts
 cr .( Starting emulation ...) 
 
-\ We start in emulation mode 
-go-emulated 
+reset-i 
 
+\ TODO fetch/execute loop BEGIN-AGAIN loop here 
+\ TODO single step loop here 
 
-\ TODO set emulation mode 
-\ TODO get jump vector 
-
-
-cr 
-
+.state cr 
 

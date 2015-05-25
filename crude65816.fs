@@ -1,4 +1,4 @@
-\ The Crude 65816 Emulator 
+\ A Crude 65816 Emulator 
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
@@ -17,7 +17,7 @@
 \ You should have received a copy of the GNU General Public License
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-cr .( The Crude 65816 Emulator in Forth)
+cr .( A Crude 65816 Emulator in Forth)
 cr .( Version pre-ALPHA  25. May 2015) 
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
@@ -86,6 +86,7 @@ create memory 16M allot
    move ;  
 
 \ load ROM files into memory
+cr .( Loading ROM files ...) 
 include config.fs  
 
 \ Convert various combinations to full 24 bit address. Assumes HEX 
@@ -108,9 +109,8 @@ defer store.a   defer store.xy
 : store16 ( u16 65addr24 -- ) \ store LSB first
    2dup swap lsb swap store8  swap msb swap 1+ store8 ; 
 
-\ Read next byte in stream
-\ TODO 
-
+\ Read current byte in stream
+: fetchbyte ( -- u8 )  PC @  PBR @  mem16>24 fetch8 ; 
 
 \ ---- FLAGS ----
 \ All flags are fully formed Forth flags (one cell large) 
@@ -181,7 +181,8 @@ defer status-r
 \ ---- OPCODE ROUTINES ----
 cr .( Loading opcode routines ... ) 
 
-: opc-00 ( brk )   ." 00 not coded yet" ; 
+: opc-00 ( brk )   ." 00 not coded yet"
+   cr ." Hit BRK command (ALPHA testing only)" quit ; 
 : opc-01 ( ora.dxi )   ." 01 not coded yet" ; 
 : opc-02 ( cop )   ." 02 not coded yet" ; 
 : opc-03 ( ora.s )   ." 03 not coded yet" ; 
@@ -314,7 +315,7 @@ cr .( Loading opcode routines ... )
 : opc-82 ( brl )   ." 82 not coded yet" ; 
 : opc-83 ( sta.s )   ." 83 not coded yet" ; 
 : opc-84 ( sty.d )   ." 84 not coded yet" ; 
-: opc-85 ( sta.d )   ." 85 not coded yet" ; 
+: opc-85 ( sta.d )   ." 85 not coded yet" PC+1 ; \ ALPHA testing only
 : opc-86 ( stx.d )   ." 86 not coded yet" ; 
 : opc-87 ( sta.dil )   ." 87 not coded yet" ; 
 : opc-88 ( dey )   ." 88 not coded yet" ; 
@@ -350,7 +351,7 @@ cr .( Loading opcode routines ... )
 : opc-A6 ( ldx.d )   ." A6 not coded yet" ; 
 : opc-A7 ( lda.dil )   ." A7 not coded yet" ; 
 : opc-A8 ( tay )   ." A8 not coded yet" ; 
-: opc-A9 ( lda.# )   ." A9 not coded yet" ; 
+: opc-A9 ( lda.# )   ." A9 not coded yet" PC+1 ; \ testing only 
 : opc-AA ( tax )   ." AA not coded yet" ; 
 : opc-AB ( plb )   ." AB not coded yet" ; 
 : opc-AC ( ldy )   ." AC not coded yet" ; 
@@ -441,7 +442,7 @@ cr .( Loading opcode routines ... )
 
 \ ---- GENERATE OPCODE JUMP TABLE ----
 \ Routine stores xt in table, offset is the opcode of the word in a cell. Use
-\ "opcode-jumptable <opcode> cells + @ execute" to call the opcode's word
+\ "opc-jumptable <opcode> cells + @ execute" to call the opcode's word
 cr .( Generating opcode jump table ... ) 
 
 : make-opc-jumptable ( -- )
@@ -521,7 +522,7 @@ cr .( Setting up interrupts ...)
 : reset-i ( -- ) 
    go-emulated
    00 \ TOS is A
-   \ TODO FLAGS?
+   \ TODO Set flags
    00 X !   00 Y !  00 PBR !  00 DBR ! 
    reset-v fetch16  PC ! ; 
 
@@ -531,16 +532,21 @@ cr .( Setting up interrupts ...)
 : brk-i ( -- ) ." BREAK routine not programmed yet" ; \ TODO 
 : cop-i ( -- ) ." COP routine not programmed yet" ; \ TODO 
 
+\ ---- MAIN CONTROL ----
+\ Single-step through the program or run emulation. To start at a given
+\ memory location, save the bank number to PBK and the address to PC, then
+\ type 'run' or 'step'
+
+: step ( -- )  opc-jumptable fetchbyte cells +  @  execute   PC+1 ; 
+: run ( -- )   begin step again ; 
 
 \ ---- START EMULATION ----
 \ Note that A is TOS, but we don't include this in the stack comments because
 \ it would drive us nuts
-cr .( Starting emulation ...) 
+cr .( Starting emulation ...) cr 
 
 reset-i 
+.state 
 
-\ TODO fetch/execute loop BEGIN-AGAIN loop here 
-\ TODO single step loop here 
-
-.state cr 
+cr ." Machine ready. Type 'run' to start emulation, 'step' for single-step."
 

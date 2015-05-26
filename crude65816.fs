@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 26. May 2015  
+\ This version: 27. May 2015  
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -63,12 +63,22 @@ variable PBR   \ Program Bank register ("K") (8 bit)
 : 16>lsb/msb ( u16 -- lsb msb  )  dup lsb swap msb ; 
 : lsb/msb>16 ( lsb msb -- u16 )  8 lshift or ; 
 
+\ Convert various combinations to full 24 bit address. Assumes HEX 
+: mem16>24  ( 65addr16 bank -- 65addr24 )  10 lshift or ; 
+: mem8>24  ( lsb msb bank -- 65addr24 )  -rot lsb/msb>16 swap mem16>24 ; 
+
 \ handle Program Counter
 : PC+u ( u -- ) ( -- )   
    create ,
    does> @ PC +! ;
 
 1 PC+u PC+1   2 PC+u PC+2   3 PC+u PC+3
+
+\ Get full 24 bit 24 bit address (PC plus PBR) 
+: PC24 ( -- 65addr24)  PC @  PBR @  mem16>24 ; 
+
+\ Advance PC depending on what size our registers are
+defer PC+fetch.a   defer PC+fetch.xy
 
 
 \ ---- MEMORY ----
@@ -91,10 +101,6 @@ create memory 16M allot
 cr .( Loading ROM files to memory ...) 
 include config.fs  
 
-\ Convert various combinations to full 24 bit address. Assumes HEX 
-: mem16>24  ( 65addr16 bank -- 65addr24 )  10 lshift or ; 
-: mem8>24  ( lsb msb bank -- 65addr24 )  -rot lsb/msb>16 swap mem16>24 ; 
-
 \ Fetch from memory 
 defer fetch.a   defer fetch.xy
 
@@ -112,7 +118,8 @@ defer store.a   defer store.xy
    2dup swap lsb swap store8  swap msb swap 1+ store8 ; 
 
 \ Read current byte in stream. Note we use PBR, not DBR
-: fetchbyte ( -- u8 )  PC @  PBR @  mem16>24 fetch8 ; 
+: fetchbyte ( -- u8 )  PC24 fetch8 ; 
+: fetchdoublebyte ( -- u16 )  PC24 fetch16 ; 
 
 \ ---- FLAGS ----
 \ All flags are fully formed Forth flags (one cell large) 
@@ -153,6 +160,92 @@ defer status-r
    z-flag @  02 and +
    c-flag @  01 and + ; 
 
+\ ---- TEST AND SET FLAGS ----
+\ Note that checks that work on A/C have their own DUP in violation of 
+\ usual Forth convention. Assumes HEX
+defer check-N.a   defer check-N.x   defer check-N.y
+
+: check-N8 ( n -- )  80 and  if n-flag set  else  n-flag clear  then ;
+: check-N16 ( n -- )  8000 and  if n-flag set  else  n-flag clear  then ;
+: check-N.a8 ( n -- ) dup check-N8 ; 
+: check-N.a16 ( n -- ) dup check-N16 ; 
+: check-N.x8 ( n -- )  X @  check-N8 ; 
+: check-N.x16 ( n -- )  X @  check-N16 ; 
+: check-N.y8 ( n -- ) Y @  check-N8 ; 
+: check-N.y16 ( n -- ) Y @ check-N16 ;   
+
+defer check-Z.a
+: check-Z ( n -- )  if  z-flag clear  else  z-flag set  then ; 
+: check-Z.a8 ( -- ) dup 0ff AND check-Z ; 
+: check-Z.a16 ( -- ) dup check-Z  ; 
+: check-Z.x ( -- )  X @  check-Z ;
+: check-Z.y ( -- )  Y @  check-Z ; 
+   
+\ common combinations
+: check-NZ.a ( -- )  check-N.a  check-Z.a ; 
+: check-NZ.x ( -- )  check-N.x  check-Z.x ; 
+: check-NZ.y ( -- )  check-N.y  check-Z.y ; 
+    
+
+\ ---- MODE SWITCHES ----
+
+\ Switch accumulator 8<->16 bit (p. 51 in Manual)
+\ Remember A is TOS 
+: a->16  ( -- )  
+   ['] fetch16 is fetch.a 
+   ['] store16 is store.a
+   ['] PC+2 is PC+fetch.a
+   ['] check-N.a16 is check-N.a
+   ['] check-Z.a16 is check-Z.a
+   m-flag clear ; 
+
+: a->8 ( -- )  
+   ['] fetch8 is fetch.a 
+   ['] store8 is store.a
+   ['] PC+1 is PC+fetch.a
+   ['] check-N.a8 is check-N.a
+   ['] check-Z.a8 is check-Z.a
+   m-flag set ;
+
+\ Switch X and Y 8<->16 bit (p. 51 in Manual) 
+: xy->16  ( -- )  
+   ['] fetch16 is fetch.xy 
+   ['] store16 is store.xy
+   ['] PC+2 is PC+fetch.xy
+   ['] check-N.x16 is check-N.x
+   ['] check-N.y16 is check-N.y
+   X @  00FF AND  X !   Y @  00FF AND  Y !  \ paranoid
+   x-flag clear ; 
+
+: xy->8 ( -- )  
+   ['] fetch8 is fetch.xy
+   ['] store8 is store.xy
+   ['] PC+1 is PC+fetch.xy
+   ['] check-N.x8 is check-N.x
+   ['] check-N.y8 is check-N.y
+   X @  00FF AND  X !   Y @  00FF AND  Y !  
+   x-flag set ; 
+
+\ switch processor modes (native/emulated). There doesn't seem to be a good
+\ verb for "native" like "emulate", so we're "going" 
+: go-native ( -- )  
+   e-flag clear
+   ['] status-r16 is status-r 
+
+   \ TODO set stack pointer to 16 bits
+   \ TODO set direct page to 16 zero page
+   ; 
+
+: go-emulated ( -- )  
+   ['] status-r8 is status-r 
+   a->8   xy->8  
+   e-flag set   
+   S @  00FF AND  0100 OR  S ! \ stack pointer to 0100
+   0 D !  \ direct page register initialized to zero 
+   \ TODO clear b-flag ?
+   \ TODO PBR and DBR ?
+   \ TODO D-Flag?
+   ; 
 
 \ ---- OUTPUT FUNCTIONS ----
 
@@ -179,8 +272,7 @@ defer status-r
 \ ---- OPCODE ROUTINES ----
 cr .( Defining opcode routines ... ) 
 
-: opc-00 ( brk )   ." 00 not coded yet"
-   cr ." Hit BRK command (ALPHA testing only)" quit ; 
+: opc-00 ( brk )   ." BRK, halting CPU (ALPHA only)" .state quit ; \ testing only
 : opc-01 ( ora.dxi )   ." 01 not coded yet" ; 
 : opc-02 ( cop )   ." 02 not coded yet" ; 
 : opc-03 ( ora.s )   ." 03 not coded yet" ; 
@@ -256,7 +348,7 @@ cr .( Defining opcode routines ... )
 : opc-49 ( eor.# )   ." 49 not coded yet" ; 
 : opc-4A ( lsr.a )   ." 4A not coded yet" ; 
 : opc-4B ( phk )   ." 4B not coded yet" ; 
-: opc-4C ( jmp )   ." 4C not coded yet" ; 
+: opc-4C ( jmp )  fetchdoublebyte  PC ! ; \ TODO TESTME 
 : opc-4D ( eor )   ." 4D not coded yet" ; 
 : opc-4E ( lsr )   ." 4E not coded yet" ; 
 : opc-4F ( eor.l )   ." 4F not coded yet" ; 
@@ -335,22 +427,22 @@ cr .( Defining opcode routines ... )
 : opc-98 ( tya )   ." 98 not coded yet" ; 
 : opc-99 ( sta.y )   ." 99 not coded yet" ; 
 : opc-9A ( txs )   ." 9A not coded yet" ; 
-: opc-9B ( txy )   ." 9B not coded yet" ; 
+: opc-9B ( txy )  X @  Y !  check-NZ.y ; \ TODO TESTME
 : opc-9C ( stz )   ." 9C not coded yet" ; 
 : opc-9D ( sta.x )   ." 9D not coded yet" ; 
 : opc-9E ( stz.x )   ." 9E not coded yet" ; 
 : opc-9F ( sta.lx )   ." 9F not coded yet" ; 
-: opc-A0 ( ldy.# )   ." A0 not coded yet" ; 
+: opc-A0 ( ldy.# )  PC24 fetch.xy  Y !  check-NZ.y  PC+fetch.xy ; \ TODO TESTME
 : opc-A1 ( lda.dxi )   ." A1 not coded yet" ; 
-: opc-A2 ( ldx.# )   ." A2 not coded yet" ; 
+: opc-A2 ( ldx.# )  PC24 fetch.xy  X !  check-NZ.x  PC+fetch.xy ; \ TODO TESTME  
 : opc-A3 ( lda.s )   ." A3 not coded yet" ; 
 : opc-A4 ( ldy.d )   ." A4 not coded yet" ; 
 : opc-A5 ( lda.d )   ." A5 not coded yet" ; 
 : opc-A6 ( ldx.d )   ." A6 not coded yet" ; 
 : opc-A7 ( lda.dil )   ." A7 not coded yet" ; 
-: opc-A8 ( tay )   ." A8 not coded yet" ; 
-: opc-A9 ( lda.# )   ." A9 not coded yet" PC+1 ; \ testing only 
-: opc-AA ( tax )   ." AA not coded yet" ; 
+: opc-A8 ( tay )  dup x-flag set? if mask8 else mask16 then  Y !  check-NZ.y ; 
+: opc-A9 ( lda.# ) drop  PC24 fetch.a  check-NZ.a  PC+fetch.a ; 
+: opc-AA ( tax )  dup x-flag set? if mask8 else mask16 then  X !  check-NZ.x ; 
 : opc-AB ( plb )   ." AB not coded yet" ; 
 : opc-AC ( ldy )   ." AC not coded yet" ; 
 : opc-AD ( lda )   ." AD not coded yet" ; 
@@ -367,7 +459,7 @@ cr .( Defining opcode routines ... )
 : opc-B8 ( clv ) v-flag clear ; 
 : opc-B9 ( lda.y )   ." B9 not coded yet" ; 
 : opc-BA ( tsx )   ." BA not coded yet" ; 
-: opc-BB ( tyx )   ." BB not coded yet" ; 
+: opc-BB ( tyx )  Y @  X !  check-NZ.x ; \ TODO TESTME
 : opc-BC ( ldy.x )   ." BC not coded yet" ; 
 : opc-BD ( lda.x )   ." BD not coded yet" ; 
 : opc-BE ( ldx.y )   ." BE not coded yet" ; 
@@ -382,7 +474,7 @@ cr .( Defining opcode routines ... )
 : opc-C7 ( cmp.dil )   ." C7 not coded yet" ; 
 : opc-C8 ( iny )   ." C8 not coded yet" ; 
 : opc-C9 ( cmp.# )   ." C9 not coded yet" ; 
-: opc-CA ( dex )   ." dex not coded yet" ; 
+: opc-CA ( dex )   ." CA not coded yet" ; 
 : opc-CB ( wai )   ." CB not coded yet" ; 
 : opc-CC ( cpy )   ." CC not coded yet" ; 
 : opc-CD ( cmp )   ." CD not coded yet" ; 
@@ -399,7 +491,7 @@ cr .( Defining opcode routines ... )
 : opc-D8 ( cld )  d-flag clear ;  
 : opc-D9 ( cmp.y )   ." D9 not coded yet" ; 
 : opc-DA ( phx )   ." DA not coded yet" ; 
-: opc-DB ( stp )   ." DB not coded yet" ; \ halts emulation
+: opc-DB ( stp )  cr ." STP instruction, halting processor." cr .state quit ; 
 : opc-DC ( jmp.il )   ." DC not coded yet" ; 
 : opc-DD ( cmp.x )   ." DD not coded yet" ; 
 : opc-DE ( dec.x )   ." DE not coded yet" ; 
@@ -414,8 +506,8 @@ cr .( Defining opcode routines ... )
 : opc-E7 ( sbc.dil )   ." E7 not coded yet" ; 
 : opc-E8 ( inx )   ." E8 not coded yet" ; 
 : opc-E9 ( sbc.# )   ." E9 not coded yet" ; 
-: opc-EA ( nop ) ." NOP not coded yet" ; 
-: opc-EB ( xba )   ." EB not coded yet" ; 
+: opc-EA ( nop ) ;   \ TODO TESTME
+: opc-EB ( xba ) dup msb swap  lsb 8 lshift  or  check-NZ.a ;  \ TODO TESTME
 : opc-EC ( cpx )   ." EC not coded yet" ; 
 : opc-ED ( sbc )   ." ED not coded yet" ; 
 : opc-EE ( inc )   ." EE not coded yet" ; 
@@ -431,7 +523,9 @@ cr .( Defining opcode routines ... )
 : opc-F8 ( sed )  d-flag set ; 
 : opc-F9 ( sbc.y )   ." F9 not coded yet" ; 
 : opc-FA ( plx )   ." FA not coded yet" ; 
-: opc-FB ( xce )   ." FB not coded yet" ; 
+: opc-FB ( xce ) \ TODO TESTME 
+   e-flag @  c-flag @  swap  c-flag !  dup e-flag !
+   if go-emulated else go-native then ; 
 : opc-FC ( jsr.xi )   ." FC not coded yet" ; 
 : opc-FD ( sbc.x )   ." FD not coded yet" ; 
 : opc-FE ( inc.x )   ." FE not coded yet" ; 
@@ -452,54 +546,6 @@ cr .( Generating opcode jump table ... )
 
 create opc-jumptable   make-opc-jumptable 
 
-
-\ ---- MODE SWITCHES ----
-
-\ Switch accumulator 8<->16 bit (p. 51 in Manual)
-\ Remember A is TOS 
-: a->16  ( -- )  
-   ['] fetch16 is fetch.a 
-   ['] store16 is store.a
-   m-flag clear ; 
-
-: a->8 ( -- )  
-   ['] fetch8 is fetch.a 
-   ['] store8 is store.a
-   m-flag set ;
-
-\ Switch X and Y 8<->16 bit (p. 51 in Manual) 
-: xy->16  ( -- )  
-   ['] fetch16 is fetch.xy 
-   ['] store16 is store.xy
-   X @  00FF AND  X !   Y @  00FF AND  Y !  \ paranoid
-   x-flag clear ; 
-
-: xy->8 ( -- )  
-   ['] fetch8 is fetch.xy
-   ['] store8 is store.xy
-   X @  00FF AND  X !   Y @  00FF AND  Y !  
-   x-flag set ; 
-
-\ switch processor modes (native/emulated). There doesn't seem to be a good
-\ verb for "native" like "emulate", so we're "going" 
-: go-native ( -- )  
-   e-flag clear
-   ['] status-r16 is status-r 
-
-   \ TODO set stack pointer to 16 bits
-   \ TODO set direct page to 16 zero page
-   ; 
-
-: go-emulated ( -- )  
-   ['] status-r8 is status-r 
-   a->8   xy->8  
-   e-flag set   
-   S @  00FF AND  0100 OR  S ! \ stack pointer to 0100
-   \ TODO set direct page to 8 zero page
-   \ TODO clear b-flag ?
-   \ TODO PBR and DBR ?
-   \ TODO D-Flag?
-   ; 
 
 \ ---- INTERRUPTS ---- 
 \ All vectors are 16 bit, access with fetch16 when given full 24 bit address
@@ -536,7 +582,9 @@ cr .( Setting up interrupts ...)
 \ memory location, save the bank number to PBK and the address to PC, then
 \ type 'run' or 'step'
 
-: step ( -- )  opc-jumptable fetchbyte cells +  @  execute   PC+1 ; 
+\ Increase PC before executing instruction so we are pointing at the
+\ operand (if available)
+: step ( -- )  opc-jumptable fetchbyte cells +  @    PC+1   execute ; 
 : run ( -- )   begin step again ; 
 
 \ ---- START EMULATION ----

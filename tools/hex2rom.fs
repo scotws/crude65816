@@ -4,8 +4,10 @@
 \ First version: 26. Mai 2015
 \ This version: 26. Mai 2015
 
-\ call with "gforth hex2rom.fs"
-\ on Linux, check results with "hexdump -C testrom.bin"
+\ Call with "gforth hex2rom.fs", on Linux, check results with 
+\ "hexdump -C testrom.bin". Load that file via config.fs. In
+\ crude65816, set the PC to the first instruction (usuall e000) 
+\ before calling "run" or "step"
 
 hex
 

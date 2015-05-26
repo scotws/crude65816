@@ -1,5 +1,4 @@
-Changelog for 
-A Crude Emulator for the 65816 in Forth 
+Changelog for A Crude Emulator for the 65816 in Forth 
 Scot W. Stevenson <scot.stevenson@gmail.com>
 
 Add new entries to the top

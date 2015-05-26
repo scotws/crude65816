@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 25. May 2015  
+\ This version: 26. May 2015  
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,28 +18,30 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version pre-ALPHA  25. May 2015) 
+cr .( Version pre-ALPHA  26. May 2015) 
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
 
 \ ---- DEFINITIONS ----
-cr .( Defining things ...)
+cr .( Defining general stuff ...)
 hex
 
-    400 constant 1k       1k 8 * constant 8k     8k 2* constant 16k
-16k 8 * constant 64k   64k 100 * constant 16M    64k constant bank 
+\ TODO make sure we even need this 
+400 constant 1k       1k 8 * constant 8k       8k 2* constant 16k
+16k 8 * constant 64k  64k 100 * constant 16M   64k constant bank 
 
 
 \ ---- HARDWARE: CPU ----
 cr .( Setting up CPU ... ) 
 
 \ Names follow the convention from the WDC data sheet
-\ Note the Accumulator (A/B/C) is top of stack 
+\ Note the Accumulator (A/B/C) is top of stack (TOS) but we don't include 
+\ this is the stack comments because it would drive us nuts
 variable PC    \ program counter (16 bit) 
 variable X     \ X register (8\16 bit)
 variable Y     \ Y register (8\16 bit)
-variable D     \ Direct register (Zero Page) (16 bit) 
+variable D     \ Direct register (Zero Page on 6502) (16 bit) 
 variable P     \ Processor Status Register (8 bit)
 variable S     \ Stack Pointer (8/16 bit)
 variable DBR   \ Data Bank register ("B") (8 bit)
@@ -53,11 +55,11 @@ variable PBR   \ Program Bank register ("K") (8 bit)
 : mask16 ( u -- u16 ) 0ffff and ; 
 : mask24 ( u -- u24 ) 0ffffff and ; 
 
-\ return least or most significant byte of 16-bit number
+\ return least, most significant byte of 16-bit number
 : lsb ( u16 -- u8 )  mask8 ;
 : msb ( u16 -- u8 )  0ff00 and  8 rshift ;
 
-\ 16 bit addresses and endian conversion. Assumes MSB is TOS 
+\ 16 bit addresses and endian conversion. Assumes MSB is TOS
 : 16>lsb/msb ( u16 -- lsb msb  )  dup lsb swap msb ; 
 : lsb/msb>16 ( lsb msb -- u16 )  8 lshift or ; 
 
@@ -71,8 +73,8 @@ variable PBR   \ Program Bank register ("K") (8 bit)
 
 \ ---- MEMORY ----
 \ All accesses to memory are always full 24 bit. Stack follows little-endian
-\ format with bank on top, then msb and lsb
-cr .( Setting up Memory ...) 
+\ format with bank on top, then msb and lsb ( lsb msb bank -- ) 
+cr .( Creating memory ...) 
 
 \ We just allot the whole possible memory range. Note that this will fail
 \ unless you called Gforth with "-m 1G" or something of that size like you
@@ -86,7 +88,7 @@ create memory 16M allot
    move ;  
 
 \ load ROM files into memory
-cr .( Loading ROM files ...) 
+cr .( Loading ROM files to memory ...) 
 include config.fs  
 
 \ Convert various combinations to full 24 bit address. Assumes HEX 
@@ -109,7 +111,7 @@ defer store.a   defer store.xy
 : store16 ( u16 65addr24 -- ) \ store LSB first
    2dup swap lsb swap store8  swap msb swap 1+ store8 ; 
 
-\ Read current byte in stream
+\ Read current byte in stream. Note we use PBR, not DBR
 : fetchbyte ( -- u8 )  PC @  PBR @  mem16>24 fetch8 ; 
 
 \ ---- FLAGS ----
@@ -121,7 +123,7 @@ variable x-flag   variable b-flag   variable d-flag
 variable i-flag   variable z-flag   variable c-flag 
 variable e-flag 
 
-\ make flag code easier for humans
+\ make flag code easier for humans to read
 : set?  ( addr -- f )  @ ;  
 : clear?  ( addr -- f )  @ invert ;
 : set  ( addr -- )  true swap ! ; 
@@ -133,7 +135,7 @@ defer status-r
 : status-r8  ( -- u8 ) 
    n-flag @  80 and 
    v-flag @  40 and +
-\   bit 5 is empty TODO see if needs to be set to zero 
+\   bit 5 is empty TODO see if this needs to be set to zero 
    b-flag @  10 and +
    d-flag @  08 and +
    i-flag @  04 and +
@@ -158,28 +160,24 @@ defer status-r
 : .8bits ( u -- ) 
    2 base !  s>d <# # # # # # # # # #> type  hex ; 
 
-\ Format number to four places, assumes HEX
-: .mask16 ( n -- addr u )
-   s>d <# # # # # #> type space ; 
-
-\ Format number to two places, assumes HEX 
-: .mask8 ( n -- addr u )
-   s>d <# # # #> type space ; 
+\ Format numbers to two, four places, assumes HEX
+: .mask8 ( n -- addr u )  s>d <# # # #> type space ; 
+: .mask16 ( n -- addr u )  s>d <# # # # # #> type space ; 
 
 \ Print state of machine 
 : .state ( -- )
    cr  e-flag set? if
-      ."  PC   K   A    X    Y    S    D   B NV-BDIZC" else
-      ."  PC   K   A    X    Y    S    D   B NVMXDIZC" then
- \ cr ." xxxx xx xxxx xxxx xxxx xxxx xxxx xx xxxxxxxx" 
-   cr 
+      ."  PC   K  BA    X    Y    S    D   B NV-BDIZC" else
+      ."  PC   K   C    X    Y    S    D   B NVMXDIZC" then cr 
+ \    ." xxxx xx xxxx xxxx xxxx xxxx xxxx xx xxxxxxxx" 
+
    PC @ .mask16   PBR @ .mask8   dup .mask16   X @ .mask16 
    Y @ .mask16    S @ .mask16    D @ .mask16   DBR @ .mask8
    status-r .8bits  space 
    e-flag set? if ." emulated" else ." native" then  cr ; 
    
 \ ---- OPCODE ROUTINES ----
-cr .( Loading opcode routines ... ) 
+cr .( Defining opcode routines ... ) 
 
 : opc-00 ( brk )   ." 00 not coded yet"
    cr ." Hit BRK command (ALPHA testing only)" quit ; 
@@ -442,7 +440,8 @@ cr .( Loading opcode routines ... )
 
 \ ---- GENERATE OPCODE JUMP TABLE ----
 \ Routine stores xt in table, offset is the opcode of the word in a cell. Use
-\ "opc-jumptable <opcode> cells + @ execute" to call the opcode's word
+\ "opc-jumptable <opcode> cells + @ execute" to call the opcode's word.
+\ Assumes HEX
 cr .( Generating opcode jump table ... ) 
 
 : make-opc-jumptable ( -- )
@@ -455,9 +454,8 @@ create opc-jumptable   make-opc-jumptable
 
 
 \ ---- MODE SWITCHES ----
-\ See page 61 in the manual
 
-\ Switch accumulator 8<->16 bit (p. 51)
+\ Switch accumulator 8<->16 bit (p. 51 in Manual)
 \ Remember A is TOS 
 : a->16  ( -- )  
    ['] fetch16 is fetch.a 
@@ -469,7 +467,7 @@ create opc-jumptable   make-opc-jumptable
    ['] store8 is store.a
    m-flag set ;
 
-\ Switch X and Y 8<->16 bit (p. 51) 
+\ Switch X and Y 8<->16 bit (p. 51 in Manual) 
 : xy->16  ( -- )  
    ['] fetch16 is fetch.xy 
    ['] store16 is store.xy
@@ -482,7 +480,8 @@ create opc-jumptable   make-opc-jumptable
    X @  00FF AND  X !   Y @  00FF AND  Y !  
    x-flag set ; 
 
-\ switch processor modes (native/emulated) 
+\ switch processor modes (native/emulated). There doesn't seem to be a good
+\ verb for "native" like "emulate", so we're "going" 
 : go-native ( -- )  
    e-flag clear
    ['] status-r16 is status-r 
@@ -521,7 +520,7 @@ cr .( Setting up interrupts ...)
 
 : reset-i ( -- ) 
    go-emulated
-   00 \ TOS is A
+   00  \ TOS is A
    \ TODO Set flags
    00 X !   00 Y !  00 PBR !  00 DBR ! 
    reset-v fetch16  PC ! ; 
@@ -533,7 +532,7 @@ cr .( Setting up interrupts ...)
 : cop-i ( -- ) ." COP routine not programmed yet" ; \ TODO 
 
 \ ---- MAIN CONTROL ----
-\ Single-step through the program or run emulation. To start at a given
+\ Single-step through the program, or run emulation. To start at a given
 \ memory location, save the bank number to PBK and the address to PC, then
 \ type 'run' or 'step'
 
@@ -541,9 +540,7 @@ cr .( Setting up interrupts ...)
 : run ( -- )   begin step again ; 
 
 \ ---- START EMULATION ----
-\ Note that A is TOS, but we don't include this in the stack comments because
-\ it would drive us nuts
-cr .( Starting emulation ...) cr 
+cr .( All done.) cr 
 
 reset-i 
 .state 

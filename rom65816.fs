@@ -1,10 +1,11 @@
 \ Example 8 KB ROM System for 
-\ The Crude 65816 Emulator (crude65816)
+\ A Crude 65816 Emulator (crude65816)
 \ Scot W. Stevenson <scot.stevenson@gmail.com>
 \ This version: 09. Jan 2015
 
 \ After assembly, this creates an 8 kb binary file that can be 
-\ loaded to $E000 in a simulator 
+\ loaded to $E000 in a simulator. Currently, this is all 6502 
+\ 8-bit code. 
 
 \ This program is distributed in the hope that it will be useful,
 \ but WITHOUT ANY WARRANTY; without even the implied warranty of

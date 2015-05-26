@@ -348,7 +348,7 @@ cr .( Defining opcode routines ... )
 : opc-49 ( eor.# )   ." 49 not coded yet" ; 
 : opc-4A ( lsr.a )   ." 4A not coded yet" ; 
 : opc-4B ( phk )   ." 4B not coded yet" ; 
-: opc-4C ( jmp )  fetchdoublebyte  PC ! ; \ TODO TESTME 
+: opc-4C ( jmp )  fetchdoublebyte  PC ! ;
 : opc-4D ( eor )   ." 4D not coded yet" ; 
 : opc-4E ( lsr )   ." 4E not coded yet" ; 
 : opc-4F ( eor.l )   ." 4F not coded yet" ; 
@@ -427,14 +427,14 @@ cr .( Defining opcode routines ... )
 : opc-98 ( tya )   ." 98 not coded yet" ; 
 : opc-99 ( sta.y )   ." 99 not coded yet" ; 
 : opc-9A ( txs )   ." 9A not coded yet" ; 
-: opc-9B ( txy )  X @  Y !  check-NZ.y ; \ TODO TESTME
+: opc-9B ( txy )  X @  Y !  check-NZ.y ;
 : opc-9C ( stz )   ." 9C not coded yet" ; 
 : opc-9D ( sta.x )   ." 9D not coded yet" ; 
 : opc-9E ( stz.x )   ." 9E not coded yet" ; 
 : opc-9F ( sta.lx )   ." 9F not coded yet" ; 
-: opc-A0 ( ldy.# )  PC24 fetch.xy  Y !  check-NZ.y  PC+fetch.xy ; \ TODO TESTME
+: opc-A0 ( ldy.# )  PC24 fetch.xy  Y !  check-NZ.y  PC+fetch.xy ;
 : opc-A1 ( lda.dxi )   ." A1 not coded yet" ; 
-: opc-A2 ( ldx.# )  PC24 fetch.xy  X !  check-NZ.x  PC+fetch.xy ; \ TODO TESTME  
+: opc-A2 ( ldx.# )  PC24 fetch.xy  X !  check-NZ.x  PC+fetch.xy ;
 : opc-A3 ( lda.s )   ." A3 not coded yet" ; 
 : opc-A4 ( ldy.d )   ." A4 not coded yet" ; 
 : opc-A5 ( lda.d )   ." A5 not coded yet" ; 
@@ -459,7 +459,7 @@ cr .( Defining opcode routines ... )
 : opc-B8 ( clv ) v-flag clear ; 
 : opc-B9 ( lda.y )   ." B9 not coded yet" ; 
 : opc-BA ( tsx )   ." BA not coded yet" ; 
-: opc-BB ( tyx )  Y @  X !  check-NZ.x ; \ TODO TESTME
+: opc-BB ( tyx )  Y @  X !  check-NZ.x ;
 : opc-BC ( ldy.x )   ." BC not coded yet" ; 
 : opc-BD ( lda.x )   ." BD not coded yet" ; 
 : opc-BE ( ldx.y )   ." BE not coded yet" ; 
@@ -523,8 +523,7 @@ cr .( Defining opcode routines ... )
 : opc-F8 ( sed )  d-flag set ; 
 : opc-F9 ( sbc.y )   ." F9 not coded yet" ; 
 : opc-FA ( plx )   ." FA not coded yet" ; 
-: opc-FB ( xce ) \ TODO TESTME 
-   e-flag @  c-flag @  swap  c-flag !  dup e-flag !
+: opc-FB ( xce )  e-flag @  c-flag @  swap  c-flag !  dup e-flag !
    if go-emulated else go-native then ; 
 : opc-FC ( jsr.xi )   ." FC not coded yet" ; 
 : opc-FD ( sbc.x )   ." FD not coded yet" ; 

@@ -14,7 +14,7 @@ and then load the emulator with
 
         include crude65816.fs
 
-You an either "run" or "step" the default monitor program. That doesn't do jack at the moment, really, but will in the future. PRE-ALPHA, remember?
+You an either "run" or "step" the default monitor program. That doesn't do jack at the moment, really, but will in the future. PRE-ALPHA, remember? For a discussion of the program, see http://forum.6502.org/viewtopic.php?f=8&t=3306 .
 
 
 

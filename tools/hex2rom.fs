@@ -22,35 +22,58 @@ create rombyhand
 
 \ =================================
 
-   0a9 c,  \ 0aa lda.#
+   0a2 c,  \   0aa ldx.#
    0aa c,  \     
-   0a8 c,  \     tay
 
-    18 c,  \     clc    \ switch to native mode 
-   0fb c,  \     xce 
-
-   0a2 c,  \ 0aa ldx.#
-    9b c,  \     txy 
-
-   0ea c,  \     nop 
-   0ea c,  \     nop 
-
-   0a0 c,  \ 0bb ldy.#
-   0bb c,  \     tyx
-
-    9b c,  \     txy
-
-    4c c,  \     jmp    \ should BRK at 00eeee
+    8e c,  \ 0eeee stx 
    0ee c, 
    0ee c, 
 
-   0db c,  \     stp
+    18 c,  \       clc    \ switch to native mode 
+   0fb c,  \       xce 
+
+   0c2 c,  \    10 rep    \ xy->16 
+    10 c, 
+
+   0a0 c,  \ 0bbbb ldy.#
+   0bb c,  \     
+   0bb c,  \     
+
+    8c c,  \ 0eeef sty 
+   0ef c, 
+   0ee c, 
+
+   0db c,  \       stp
+
+
+\ PUT UNUSED OPCODES BELOW THIS LINE 
+
+\  0a8 c,  \     tay
+
+\   4c c,  \     jmp    \ should BRK at 00eeee
+\  0ee c, 
+\  0ee c, 
+
+\  0ea c,  \     nop 
+
+\  0a0 c,  \ 0bb ldy.#
+\  0bb c,  \     
+
+\   9b c,  \     txy
+
+\  0a2 c,  \ 0aa ldx.#
+\   9b c,  \     txy 
+
+
+
+
 
 \ =================================
 
 s" testrom.bin" makefile   ( -- fileid ) 
 fileid ! 
-rombyhand 10  fileid @  write-file
+decimal 
+rombyhand 16  fileid @  write-file
 fileid @ close-file 
 
 bye   

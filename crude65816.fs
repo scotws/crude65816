@@ -64,8 +64,9 @@ variable PBR   \ Program Bank register ("K") (8 bit)
 : lsb/msb>16 ( lsb msb -- u16 )  8 lshift or ; 
 
 \ Convert various combinations to full 24 bit address. Assumes HEX 
-: mem16>24  ( 65addr16 bank -- 65addr24 )  10 lshift or ; 
-: mem8>24  ( lsb msb bank -- 65addr24 )  -rot lsb/msb>16 swap mem16>24 ; 
+: mem16>24  ( 65addr16 -- 65addr24 )  PBR @  10 lshift or ; 
+: mem16/bank>24  ( 65addr16 bank -- 65addr24 )  10 lshift or ; 
+: mem8>24  ( lsb msb bank -- 65addr24 )  -rot lsb/msb>16 swap mem16/bank>24 ; 
 
 \ handle Program Counter
 : PC+u ( u -- ) ( -- )   
@@ -74,8 +75,8 @@ variable PBR   \ Program Bank register ("K") (8 bit)
 
 1 PC+u PC+1   2 PC+u PC+2   3 PC+u PC+3
 
-\ Get full 24 bit 24 bit address (PC plus PBR) 
-: PC24 ( -- 65addr24)  PC @  PBR @  mem16>24 ; 
+\ Get full 24 bit current address (PC plus PBR) 
+: PC24 ( -- 65addr24)  PC @  PBR @  mem16/bank>24 ; 
 
 \ Advance PC depending on what size our registers are
 defer PC+fetch.a   defer PC+fetch.xy
@@ -109,6 +110,7 @@ defer fetch.a   defer fetch.xy
 \ stack in "normal" big endian format
 : fetch8  ( 65addr24 -- u8 )  memory +  c@ ; 
 : fetch16  ( 65addr24 -- u16 )  dup fetch8  swap 1+  fetch8  lsb/msb>16 ; 
+: fetch24  ( 65addr24 -- u24 ) ." fetch24 not coded yet" ; \ TODO 
 
 \ Store to memory 
 defer store.a   defer store.xy
@@ -118,8 +120,8 @@ defer store.a   defer store.xy
    2dup swap lsb swap store8  swap msb swap 1+ store8 ; 
 
 \ Read current byte in stream. Note we use PBR, not DBR
-: fetchbyte ( -- u8 )  PC24 fetch8 ; 
-: fetchdoublebyte ( -- u16 )  PC24 fetch16 ; 
+: fetch1byte ( -- u8 )  PC24 fetch8 ; 
+: fetch2bytes ( -- u16 )  PC24 fetch16 ; 
 
 \ ---- FLAGS ----
 \ All flags are fully formed Forth flags (one cell large) 
@@ -160,7 +162,9 @@ defer status-r
    z-flag @  02 and +
    c-flag @  01 and + ; 
 
+
 \ ---- TEST AND SET FLAGS ----
+
 \ Note that checks that work on A/C have their own DUP in violation of 
 \ usual Forth convention. Assumes HEX
 defer check-N.a   defer check-N.x   defer check-N.y
@@ -187,7 +191,7 @@ defer check-Z.a
 : check-NZ.y ( -- )  check-N.y  check-Z.y ; 
     
 
-\ ---- MODE SWITCHES ----
+\ ---- REGISTER MODE SWITCHES ----
 
 \ Switch accumulator 8<->16 bit (p. 51 in Manual)
 \ Remember A is TOS 
@@ -246,6 +250,17 @@ defer check-Z.a
    \ TODO PBR and DBR ?
    \ TODO D-Flag?
    ; 
+
+
+\ ---- ADDRESSING MODES --- 
+cr .( Defining addressing modes ...) 
+
+\ Note that the opcodes for Absolute Mode have no suffix, but we use
+\ "mode.abs" for clarity. Note that not all modes are listed here, as 
+\ some are easier to code by hand. 
+
+: mode.abs ( -- 65addr24 ) fetch2bytes mem16>24 PC+2 ; 
+
 
 \ ---- OUTPUT FUNCTIONS ----
 
@@ -348,7 +363,7 @@ cr .( Defining opcode routines ... )
 : opc-49 ( eor.# )   ." 49 not coded yet" ; 
 : opc-4A ( lsr.a )   ." 4A not coded yet" ; 
 : opc-4B ( phk )   ." 4B not coded yet" ; 
-: opc-4C ( jmp )  fetchdoublebyte  PC ! ;
+: opc-4C ( jmp )  fetch2bytes  PC ! ;
 : opc-4D ( eor )   ." 4D not coded yet" ; 
 : opc-4E ( lsr )   ." 4E not coded yet" ; 
 : opc-4F ( eor.l )   ." 4F not coded yet" ; 
@@ -401,20 +416,20 @@ cr .( Defining opcode routines ... )
 : opc-7E ( ror.x )   ." 7E not coded yet" ; 
 : opc-7F ( adc.lx )   ." 7F not coded yet" ; 
 : opc-80 ( bra )   ." 80 not coded yet" ; 
-: opc-81 ( sta.dxi )   ." 81 not coded yet" ; \ CHECK OPCODE
+: opc-81 ( sta.dxi )   ." 81 not coded yet" ; \ TODO CHECK OPCODE
 : opc-82 ( brl )   ." 82 not coded yet" ; 
 : opc-83 ( sta.s )   ." 83 not coded yet" ; 
 : opc-84 ( sty.d )   ." 84 not coded yet" ; 
-: opc-85 ( sta.d )   ." 85 not coded yet" PC+1 ; \ ALPHA testing only
+: opc-85 ( sta.d )   ." 85 not coded yet" ; 
 : opc-86 ( stx.d )   ." 86 not coded yet" ; 
 : opc-87 ( sta.dil )   ." 87 not coded yet" ; 
 : opc-88 ( dey )   ." 88 not coded yet" ; 
 : opc-89 ( bit.# )   ." 89 not coded yet" ; 
 : opc-8A ( txa )   ." 8A not coded yet" ; 
 : opc-8B ( phb )   ." 8B not coded yet" ; 
-: opc-8C ( sty )   ." 8C not coded yet" ; 
-: opc-8D ( sta ) ." 8D not coded yet" ; 
-: opc-8E ( stx ) ." 8E not coded yet" ; 
+: opc-8C ( sty )  Y @  mode.abs  store.xy ;
+: opc-8D ( sta )  dup  mode.abs  store.a ; 
+: opc-8E ( stx )  X @  mode.abs  store.xy ;
 : opc-8F ( sta.l )   ." 8F not coded yet" ; 
 : opc-90 ( bcc )   ." 90 not coded yet" ; 
 : opc-91 ( sta.diy )   ." 91 not coded yet" ; 
@@ -466,7 +481,13 @@ cr .( Defining opcode routines ... )
 : opc-BF ( lda.lx )   ." BF not coded yet" ; 
 : opc-C0 ( cpy.# )   ." C0 not coded yet" ; 
 : opc-C1 ( cmp.dxi )   ." C1 not coded yet" ; 
-: opc-C2 ( rep.# )   ." C2 not coded yet" ; 
+: opc-C2 ( rep ) \ TODO crude testing version, complete this for all flags
+   cr ." WARNING: REP is incomplete, works only on m and x flags" cr
+   fetch1byte 
+   dup  20 = if a->16 else 
+   dup  10 = if xy->16  else 
+   dup  30 = if a->16 xy->16 then then then drop 
+   PC+1 ; 
 : opc-C3 ( cmp.s )   ." C3 not coded yet" ; 
 : opc-C4 ( cpy.d )   ." C4 not coded yet" ; 
 : opc-C5 ( cmp.d )   ." C5 not coded yet" ; 
@@ -498,7 +519,13 @@ cr .( Defining opcode routines ... )
 : opc-DF ( cmp.lx )   ." DF not coded yet" ; 
 : opc-E0 ( cpx.# )   ." E0 not coded yet" ; 
 : opc-E1 ( sbc.dxi )  ." E1 not coded yet" ; 
-: opc-E2 ( cpx.# )   ." E2 not coded yet" ; 
+: opc-E2 ( sep ) \ TODO crude testing version, complete this for all flags
+   cr ." WARNING: SEP is incomplete, works only on m and x flags" cr
+   fetch1byte 
+   dup  20 = if a->8 else 
+   dup  10 = if xy->8  else 
+   dup  30 = if a->8 xy->8 then then then drop 
+   PC+1 ; 
 : opc-E3 ( sbc.s )   ." E3 not coded yet" ; 
 : opc-E4 ( cpx.d )   ." E4 not coded yet" ; 
 : opc-E5 ( sbc.d )   ." E5 not coded yet" ; 
@@ -506,7 +533,7 @@ cr .( Defining opcode routines ... )
 : opc-E7 ( sbc.dil )   ." E7 not coded yet" ; 
 : opc-E8 ( inx )   ." E8 not coded yet" ; 
 : opc-E9 ( sbc.# )   ." E9 not coded yet" ; 
-: opc-EA ( nop ) ;   \ TODO TESTME
+: opc-EA ( nop ) ;
 : opc-EB ( xba ) dup msb swap  lsb 8 lshift  or  check-NZ.a ;  \ TODO TESTME
 : opc-EC ( cpx )   ." EC not coded yet" ; 
 : opc-ED ( sbc )   ." ED not coded yet" ; 
@@ -583,7 +610,7 @@ cr .( Setting up interrupts ...)
 
 \ Increase PC before executing instruction so we are pointing at the
 \ operand (if available)
-: step ( -- )  opc-jumptable fetchbyte cells +  @    PC+1   execute ; 
+: step ( -- )  opc-jumptable fetch1byte cells +  @    PC+1   execute ; 
 : run ( -- )   begin step again ; 
 
 \ ---- START EMULATION ----

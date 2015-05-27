@@ -1,7 +1,7 @@
 Manual for A Crude 65816 Emulator 
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 09. Jan 2015
-This version: 26. May 2015
+This version: 27. May 2015
 
 
 THIS DOCUMENT IS CURRENTLY MERELY A COLLECTION OF NOTES. WHEN IN DOUBT, USE THE SOURCE CODE. 
@@ -52,7 +52,19 @@ The Crude Emulator current supports the following addition commands. Note that b
         run             - run the emulator continuously
         step            - run one instruction in single-step mode
 
-Because of the nature of Forth, any word defined in the emulator can be used from the command line. 
+"step" is usually used in combination with ".state" ("step .state") to show the status of the emulator after every step. Because of the nature of Forth, any word defined in the emulator can be used from the command line. For example, to get a dump of a memory range, we can use a command such as 
+
+        00e000 memory +  4 dump 
+
+Which will show the first four bytes of the 65816's memory starting at bank 0, address e000. To force the machine to run at a certain address, just save it in the PC: 
+
+        00e000 PC ! 
+
+followed by a "run" or "step". The interrupt vectors can be accessed by hand this way, too: 
+
+        reset-i
+
+Note that currently most interrupt routines are not functional. 
 
 
 

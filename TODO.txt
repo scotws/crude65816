@@ -1,0 +1,13 @@
+TODO for A Crude 65816 Emulator
+Scot W. Stevenson <scot.stevenson@gmail.com>
+First version: 27. May 2015
+This version: 27. May 2015
+
+
+TODO 
+
+
+
+QUESTIONS 
+
+- TSC: We always copy the complete Stack Pointer to the Accumulator, regardless if A is 16 or 8 bits. However, does the N flag react to the 16th or 8th bit, or is it always affected by the 16th bit as well?

@@ -50,14 +50,15 @@ variable PBR   \ Program Bank register ("K") (8 bit)
 
 \ ---- HELPER FUNCTIONS ----
 
-\ mask addresses
+\ mask addresses / hex numbers
 : mask8 ( u -- u8 ) 0ff and ; 
 : mask16 ( u -- u16 ) 0ffff and ; 
 : mask24 ( u -- u24 ) 0ffffff and ; 
+: maskmsb ( u16 -- u16 ) 0ff00 and ; \ used for B register 
 
 \ return least, most significant byte of 16-bit number
 : lsb ( u16 -- u8 )  mask8 ;
-: msb ( u16 -- u8 )  0ff00 and  8 rshift ;
+: msb ( u16 -- u8 )  maskmsb  8 rshift ;
 
 \ 16 bit addresses and endian conversion. Assumes MSB is TOS
 : 16>lsb/msb ( u16 -- lsb msb  )  dup lsb swap msb ; 
@@ -80,6 +81,9 @@ variable PBR   \ Program Bank register ("K") (8 bit)
 
 \ Advance PC depending on what size our registers are
 defer PC+fetch.a   defer PC+fetch.xy
+
+\ Rescue B part of Accumulator. Used by AND for example
+: rescue.b ( C u -- B C u )  over maskmsb -rot ; 
 
 
 \ ---- MEMORY ----
@@ -122,6 +126,7 @@ defer store.a   defer store.xy
 \ Read current byte in stream. Note we use PBR, not DBR
 : fetch1byte ( -- u8 )  PC24 fetch8 ; 
 : fetch2bytes ( -- u16 )  PC24 fetch16 ; 
+
 
 \ ---- FLAGS ----
 \ All flags are fully formed Forth flags (one cell large) 
@@ -191,6 +196,14 @@ defer check-Z.a
 : check-NZ.y ( -- )  check-N.y  check-Z.y ; 
     
 
+\ ----- ALU COMMANDS ---- 
+
+defer and.a
+
+: and8  ( u8 -- u8 )  rescue.b  and mask8  or ;  
+: and16 ( u16 -- u16 )  and mask16 ; \ paranoid 
+
+
 \ ---- REGISTER MODE SWITCHES ----
 
 \ Switch accumulator 8<->16 bit (p. 51 in Manual)
@@ -201,6 +214,7 @@ defer check-Z.a
    ['] PC+2 is PC+fetch.a
    ['] check-N.a16 is check-N.a
    ['] check-Z.a16 is check-Z.a
+   ['] and16 is and.a
    m-flag clear ; 
 
 : a->8 ( -- )  
@@ -209,6 +223,7 @@ defer check-Z.a
    ['] PC+1 is PC+fetch.a
    ['] check-N.a8 is check-N.a
    ['] check-Z.a8 is check-Z.a
+   ['] and8 is and.a
    m-flag set ;
 
 \ Switch X and Y 8<->16 bit (p. 51 in Manual) 
@@ -259,7 +274,9 @@ cr .( Defining addressing modes ...)
 \ "mode.abs" for clarity. Note that not all modes are listed here, as 
 \ some are easier to code by hand. 
 
-: mode.abs ( -- 65addr24 ) fetch2bytes mem16>24 PC+2 ; 
+: mode.abs ( -- 65addr24 ) fetch2bytes mem16>24 PC+2 ; \ absolute
+: mode.x  ( -- 65addr24 ) mode.abs  x @  + ; \ absolute indexed x \ TODO TESTME
+: mode.y  ( -- 65addr24 ) mode.abs  y @  + ; \ absolute indexed y \ TODO TESTME
 
 
 \ ---- OUTPUT FUNCTIONS ----
@@ -283,6 +300,7 @@ cr .( Defining addressing modes ...)
    Y @ .mask16    S @ .mask16    D @ .mask16   DBR @ .mask8
    status-r .8bits  space 
    e-flag set? if ." emulated" else ." native" then  cr ; 
+
    
 \ ---- OPCODE ROUTINES ----
 cr .( Defining opcode routines ... ) 
@@ -314,7 +332,7 @@ cr .( Defining opcode routines ... )
 : opc-18 ( clc )  c-flag clear ; 
 : opc-19 ( ora.y )   ." 19 not coded yet" ; 
 : opc-1A ( inc.a )   ." 1A not coded yet" ; 
-: opc-1B ( tcs )   ." 1B not coded yet" ; 
+: opc-1B ( tcs ) ." 1B not coded yet" ; 
 : opc-1C ( trb )   ." 1C not coded yet" ; 
 : opc-1D ( ora.x )   ." 1D not coded yet" ; 
 : opc-1E ( asl.x )   ." 1E not coded yet" ; 
@@ -332,7 +350,7 @@ cr .( Defining opcode routines ... )
 : opc-2A ( rol )   ." 2A not coded yet" ; 
 : opc-2B ( pld )   ." 2B not coded yet" ; 
 : opc-2C ( bit )   ." 2C not coded yet" ; 
-: opc-2D ( and )   ." 2D not coded yet" ; 
+: opc-2D ( and )  mode.abs  fetch.a  and.a  check-NZ.a ;  \ TODO TESTME
 : opc-2E ( rol )   ." 2E not coded yet" ; 
 : opc-2F ( and.l )   ." 2F not coded yet" ; 
 : opc-30 ( bmi )   ." 30 not coded yet" ; 
@@ -346,14 +364,14 @@ cr .( Defining opcode routines ... )
 : opc-38 ( sec )  c-flag set ;  
 : opc-39 ( and.y )   ." 39 not coded yet" ; 
 : opc-3A ( dec.a )   ." 3A not coded yet" ; 
-: opc-3B ( tsc )   ." 3B not coded yet" ; 
+: opc-3B ( tsc )  drop  S @  mask16  check-NZ.a ; \ TODO check N behavior
 : opc-3C ( bit.x )   ." 3C not coded yet" ; 
 : opc-3D ( and.x )   ." 3D not coded yet" ; 
 : opc-3E ( rol.x )   ." 3E not coded yet" ; 
 : opc-3F ( and.lx )   ." 3F not coded yet" ; 
 : opc-40 ( rti )   ." 40 not coded yet" ; 
 : opc-41 ( eor.dxi )   ." 41 not coded yet" ; 
-: opc-42 ( wdm )   ." 42 not coded yet" ; 
+: opc-42 ( wdm ) ." WARNING: WDM executed."  PC+1 ; 
 : opc-43 ( eor.s )   ." 43 not coded yet" ; 
 : opc-44 ( mvp )   ." 44 not coded yet" ; 
 : opc-45 ( eor.d )   ." 45 not coded yet" ; 
@@ -378,7 +396,7 @@ cr .( Defining opcode routines ... )
 : opc-58 ( cli )  i-flag clear ;  
 : opc-59 ( eor.y )   ." 59 not coded yet" ; 
 : opc-5A ( phy )   ." 5A not coded yet" ; 
-: opc-5B ( tcd )   ." 5B not coded yet" ; 
+: opc-5B ( tcd )  dup  mask16  D ! check-NZ.a ; \ mask16 is paranoid
 : opc-5C ( jmp.l )   ." 5C not coded yet" ; 
 : opc-5D ( eor.dx )   ." 5D not coded yet" ; 
 : opc-5E ( lsr.x )   ." 5E not coded yet" ; 
@@ -410,13 +428,13 @@ cr .( Defining opcode routines ... )
 : opc-78 ( sei ) i-flag set ; 
 : opc-79 ( adc.y )   ." 79 not coded yet" ; 
 : opc-7A ( ply )   ." 7A not coded yet" ; 
-: opc-7B ( tdc )   ." 7B not coded yet" ; 
+: opc-7B ( tdc )  drop  D @  mask16  check-NZ.a ;  \ TODO TESTME, mask16 paranoid
 : opc-7C ( jmp.xi )   ." 7C not coded yet" ; 
 : opc-7D ( adc.x )   ." 7D not coded yet" ; 
 : opc-7E ( ror.x )   ." 7E not coded yet" ; 
 : opc-7F ( adc.lx )   ." 7F not coded yet" ; 
 : opc-80 ( bra )   ." 80 not coded yet" ; 
-: opc-81 ( sta.dxi )   ." 81 not coded yet" ; \ TODO CHECK OPCODE
+: opc-81 ( sta.dxi )   ." 81 not coded yet" ;
 : opc-82 ( brl )   ." 82 not coded yet" ; 
 : opc-83 ( sta.s )   ." 83 not coded yet" ; 
 : opc-84 ( sty.d )   ." 84 not coded yet" ; 
@@ -425,7 +443,8 @@ cr .( Defining opcode routines ... )
 : opc-87 ( sta.dil )   ." 87 not coded yet" ; 
 : opc-88 ( dey )   ." 88 not coded yet" ; 
 : opc-89 ( bit.# )   ." 89 not coded yet" ; 
-: opc-8A ( txa )   ." 8A not coded yet" ; 
+: opc-8A ( txa )  m-flag clear? if  drop  X @  else
+   maskmsb  X @  mask8 or  then ; \ TODO TESTME
 : opc-8B ( phb )   ." 8B not coded yet" ; 
 : opc-8C ( sty )  Y @  mode.abs  store.xy ;
 : opc-8D ( sta )  dup  mode.abs  store.a ; 
@@ -439,11 +458,12 @@ cr .( Defining opcode routines ... )
 : opc-95 ( sta.dx )   ." 95 not coded yet" ; 
 : opc-96 ( stx.dy )   ." 96 not coded yet" ; 
 : opc-97 ( sta.dily )   ." 97 not coded yet" ; 
-: opc-98 ( tya )   ." 98 not coded yet" ; 
+: opc-98 ( tya )  m-flag clear? if  drop  Y @  else
+   maskmsb  Y @  mask8 or  then ; \ TODO TESTME
 : opc-99 ( sta.y )   ." 99 not coded yet" ; 
 : opc-9A ( txs )   ." 9A not coded yet" ; 
 : opc-9B ( txy )  X @  Y !  check-NZ.y ;
-: opc-9C ( stz )   ." 9C not coded yet" ; 
+: opc-9C ( stz )  0  mode.abs  store.a ;  \ TODO TESTME
 : opc-9D ( sta.x )   ." 9D not coded yet" ; 
 : opc-9E ( stz.x )   ." 9E not coded yet" ; 
 : opc-9F ( sta.lx )   ." 9F not coded yet" ; 
@@ -473,7 +493,8 @@ cr .( Defining opcode routines ... )
 : opc-B7 ( lda.dy )   ." B7 not coded yet" ; 
 : opc-B8 ( clv ) v-flag clear ; 
 : opc-B9 ( lda.y )   ." B9 not coded yet" ; 
-: opc-BA ( tsx )   ." BA not coded yet" ; 
+: opc-BA ( tsx )  S @  x-flag set? if 00ff and else mask16 then  
+   X !  check-NZ.x ;  \ mask16 is paranoid TODO TESTME
 : opc-BB ( tyx )  Y @  X !  check-NZ.x ;
 : opc-BC ( ldy.x )   ." BC not coded yet" ; 
 : opc-BD ( lda.x )   ." BD not coded yet" ; 
@@ -496,7 +517,9 @@ cr .( Defining opcode routines ... )
 : opc-C8 ( iny )   ." C8 not coded yet" ; 
 : opc-C9 ( cmp.# )   ." C9 not coded yet" ; 
 : opc-CA ( dex )   ." CA not coded yet" ; 
-: opc-CB ( wai )   ." CB not coded yet" ; 
+: opc-CB ( wai ) \ TODO crude testing version, complete this for i-flag
+   cr ." WARNING: WAI not fully implemented" 
+   cr ." WAI instruction, halting processor" cr .state quit ; 
 : opc-CC ( cpy )   ." CC not coded yet" ; 
 : opc-CD ( cmp )   ." CD not coded yet" ; 
 : opc-CE ( dec )   ." dec not coded yet" ; 
@@ -512,7 +535,7 @@ cr .( Defining opcode routines ... )
 : opc-D8 ( cld )  d-flag clear ;  
 : opc-D9 ( cmp.y )   ." D9 not coded yet" ; 
 : opc-DA ( phx )   ." DA not coded yet" ; 
-: opc-DB ( stp )  cr ." STP instruction, halting processor." cr .state quit ; 
+: opc-DB ( stp )  cr ." STP instruction, halting processor" cr .state quit ; 
 : opc-DC ( jmp.il )   ." DC not coded yet" ; 
 : opc-DD ( cmp.x )   ." DD not coded yet" ; 
 : opc-DE ( dec.x )   ." DE not coded yet" ; 

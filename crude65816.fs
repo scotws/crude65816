@@ -199,9 +199,17 @@ defer check-Z.a
 \ ----- ALU COMMANDS ---- 
 
 defer and.a
-
 : and8  ( u8 -- u8 )  rescue.b  and mask8  or ;  
 : and16 ( u16 -- u16 )  and mask16 ; \ paranoid 
+
+defer eor.a
+: eor8  ( u8 -- u8 )  rescue.b  xor mask8  or ;  
+: eor16 ( u16 -- u16 )  xor mask16 ; \ paranoid 
+
+defer ora.a
+: ora8  ( u8 -- u8 )  rescue.b  or mask8  or ;  
+: ora16 ( u16 -- u16 )  or mask16 ; \ paranoid 
+
 
 
 \ ---- REGISTER MODE SWITCHES ----
@@ -215,6 +223,7 @@ defer and.a
    ['] check-N.a16 is check-N.a
    ['] check-Z.a16 is check-Z.a
    ['] and16 is and.a
+   ['] eor16 is eor.a
    m-flag clear ; 
 
 : a->8 ( -- )  
@@ -224,6 +233,7 @@ defer and.a
    ['] check-N.a8 is check-N.a
    ['] check-Z.a8 is check-Z.a
    ['] and8 is and.a
+   ['] eor8 is eor.a
    m-flag set ;
 
 \ Switch X and Y 8<->16 bit (p. 51 in Manual) 
@@ -314,11 +324,11 @@ cr .( Defining opcode routines ... )
 : opc-06 ( asl.d )  ." 06 not coded yet" ; 
 : opc-07 ( ora.dil )   ." 07 not coded yet" ; 
 : opc-08 ( php )   ." 08 not coded yet" ; 
-: opc-09 ( ora.# )   ." 09 not coded yet" ; 
+: opc-09 ( ora.# )  PC24 fetch.a  ora.a  check-NZ.a  PC+fetch.a ; \ TODO TESTME
 : opc-0A ( asl.a )   ." 0A not coded yet" ; 
 : opc-0B ( phd )   ." 0B not coded yet" ; 
 : opc-0C ( tsb )   ." 0C not coded yet" ; 
-: opc-0D ( ora )   ." 0D not coded yet" ; 
+: opc-0D ( ora )  mode.abs  fetch.a  ora.a  check-NZ.a ;  \ TODO TESTME
 : opc-0E ( asl )   ." 0E not coded yet" ; 
 : opc-0F ( ora.l )   ." 0F not coded yet" ; 
 : opc-10 ( bpl )   ." 10 not coded yet" ; 
@@ -346,7 +356,7 @@ cr .( Defining opcode routines ... )
 : opc-26 ( rol.d )   ." 26 not coded yet" ; 
 : opc-27 ( and.dil )   ." 27 not coded yet" ; 
 : opc-28 ( plp )   ." 28 not coded yet" ; 
-: opc-29 ( and.# )   ." 29 not coded yet" ; 
+: opc-29 ( and.# )  PC24 fetch.a  and.a  check-NZ.a  PC+fetch.a ; \ TODO TESTME
 : opc-2A ( rol )   ." 2A not coded yet" ; 
 : opc-2B ( pld )   ." 2B not coded yet" ; 
 : opc-2C ( bit )   ." 2C not coded yet" ; 
@@ -378,11 +388,11 @@ cr .( Defining opcode routines ... )
 : opc-46 ( lsr.d )   ." 46 not coded yet" ; 
 : opc-47 ( eor.dil )   ." 47 not coded yet" ; 
 : opc-48 ( pha )   ." 48 not coded yet" ; 
-: opc-49 ( eor.# )   ." 49 not coded yet" ; 
+: opc-49 ( eor.# )  PC24 fetch.a  eor.a  check-NZ.a  PC+fetch.a ; \ TODO TESTME
 : opc-4A ( lsr.a )   ." 4A not coded yet" ; 
 : opc-4B ( phk )   ." 4B not coded yet" ; 
 : opc-4C ( jmp )  fetch2bytes  PC ! ;
-: opc-4D ( eor )   ." 4D not coded yet" ; 
+: opc-4D ( eor )  mode.abs  fetch.a  eor.a  check-NZ.a ;  \ TODO TESTME
 : opc-4E ( lsr )   ." 4E not coded yet" ; 
 : opc-4F ( eor.l )   ." 4F not coded yet" ; 
 : opc-50 ( bvc )   ." 50 not coded yet" ; 

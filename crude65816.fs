@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 27. May 2015  
+\ This version: 30. May 2015  
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -126,6 +126,7 @@ defer store.a   defer store.xy
 \ Read current byte in stream. Note we use PBR, not DBR
 : fetch1byte ( -- u8 )  PC24 fetch8 ; 
 : fetch2bytes ( -- u16 )  PC24 fetch16 ; 
+: fetch3bytes ( -- u24 ) PC24 fetch24 ; 
 
 
 \ ---- FLAGS ----
@@ -284,9 +285,19 @@ cr .( Defining addressing modes ...)
 \ "mode.abs" for clarity. Note that not all modes are listed here, as 
 \ some are easier to code by hand. 
 
-: mode.abs ( -- 65addr24 ) fetch2bytes mem16>24 PC+2 ; \ absolute
-: mode.x  ( -- 65addr24 ) mode.abs  x @  + ; \ absolute indexed x \ TODO TESTME
-: mode.y  ( -- 65addr24 ) mode.abs  y @  + ; \ absolute indexed y \ TODO TESTME
+\ absolute 
+: mode.abs ( -- 65addr24 ) fetch2bytes mem16>24 PC+2 ;
+
+\ absolute x/y indexed
+: mode.x  ( -- 65addr24 ) mode.abs  x @  + ; \ TODO handle overflow TESTME
+: mode.y  ( -- 65addr24 ) mode.abs  y @  + ; \ TODO handle overflow TESTME
+
+\ absolute long 
+: mode.l  ( -- 65addr24)  fetch3bytes mem16>24 PC+3 ; \ TODO TESTME
+
+\ absolute long x indexed
+: mode.lx ( -- 65addr24)  mode.l  x @ + ; \ TODO handle overflow TESTME 
+
 
 
 \ ---- OUTPUT FUNCTIONS ----
@@ -330,7 +341,7 @@ cr .( Defining opcode routines ... )
 : opc-0C ( tsb )   ." 0C not coded yet" ; 
 : opc-0D ( ora )  mode.abs  fetch.a  ora.a  check-NZ.a ;  \ TODO TESTME
 : opc-0E ( asl )   ." 0E not coded yet" ; 
-: opc-0F ( ora.l )   ." 0F not coded yet" ; 
+: opc-0F ( ora.l )  mode.l  fetch.a  ora.a check-NZ.a ; \ TODO TESTME
 : opc-10 ( bpl )   ." 10 not coded yet" ; 
 : opc-11 ( ora.diy )   ." 11 not coded yet" ; 
 : opc-12 ( ora.di )   ." 12 not coded yet" ; 
@@ -362,7 +373,7 @@ cr .( Defining opcode routines ... )
 : opc-2C ( bit )   ." 2C not coded yet" ; 
 : opc-2D ( and )  mode.abs  fetch.a  and.a  check-NZ.a ;  \ TODO TESTME
 : opc-2E ( rol )   ." 2E not coded yet" ; 
-: opc-2F ( and.l )   ." 2F not coded yet" ; 
+: opc-2F ( and.l )  mode.l  fetch.a  and.a  check-NZ.a ;  \ TODO TESTME
 : opc-30 ( bmi )   ." 30 not coded yet" ; 
 : opc-31 ( and.diy )   ." 31 not coded yet" ; 
 : opc-32 ( and.di )   ." 32 not coded yet" ; 
@@ -378,7 +389,7 @@ cr .( Defining opcode routines ... )
 : opc-3C ( bit.x )   ." 3C not coded yet" ; 
 : opc-3D ( and.x )   ." 3D not coded yet" ; 
 : opc-3E ( rol.x )   ." 3E not coded yet" ; 
-: opc-3F ( and.lx )   ." 3F not coded yet" ; 
+: opc-3F ( and.lx )  mode.lx  fetch.a  and.a  check-NZ.a ; \ TODO TESTME
 : opc-40 ( rti )   ." 40 not coded yet" ; 
 : opc-41 ( eor.dxi )   ." 41 not coded yet" ; 
 : opc-42 ( wdm ) ." WARNING: WDM executed."  PC+1 ; 
@@ -394,7 +405,7 @@ cr .( Defining opcode routines ... )
 : opc-4C ( jmp )  fetch2bytes  PC ! ;
 : opc-4D ( eor )  mode.abs  fetch.a  eor.a  check-NZ.a ;  \ TODO TESTME
 : opc-4E ( lsr )   ." 4E not coded yet" ; 
-: opc-4F ( eor.l )   ." 4F not coded yet" ; 
+: opc-4F ( eor.l )  mode.l  fetch.a  eor.a  check-NZ.a ; \ TODO TESTME
 : opc-50 ( bvc )   ." 50 not coded yet" ; 
 : opc-51 ( eor.diy )   ." 51 not coded yet" ; 
 : opc-52 ( eor.di )   ." 52 not coded yet" ; 
@@ -407,10 +418,10 @@ cr .( Defining opcode routines ... )
 : opc-59 ( eor.y )   ." 59 not coded yet" ; 
 : opc-5A ( phy )   ." 5A not coded yet" ; 
 : opc-5B ( tcd )  dup  mask16  D ! check-NZ.a ; \ mask16 is paranoid
-: opc-5C ( jmp.l )   ." 5C not coded yet" ; 
+: opc-5C ( jmp.l )   opc-4C  fetch1byte PBR !  PC+3 ; \ TODO TESTME
 : opc-5D ( eor.dx )   ." 5D not coded yet" ; 
 : opc-5E ( lsr.x )   ." 5E not coded yet" ; 
-: opc-5F ( eor.lx )   ." 5F not coded yet" ; 
+: opc-5F ( eor.lx ) mode.lx  fetch.a  eor.a  check-NZ.a ; \ TODO TESTME
 : opc-60 ( rts )   ." 60 not coded yet" ; 
 : opc-61 ( adc.dxi )   ." 61 not coded yet" ; 
 : opc-62 ( per )   ." 62 not coded yet" ; 
@@ -459,7 +470,7 @@ cr .( Defining opcode routines ... )
 : opc-8C ( sty )  Y @  mode.abs  store.xy ;
 : opc-8D ( sta )  dup  mode.abs  store.a ; 
 : opc-8E ( stx )  X @  mode.abs  store.xy ;
-: opc-8F ( sta.l )   ." 8F not coded yet" ; 
+: opc-8F ( sta.l )  dup  mode.l  store.a ; \ TODO TESTME
 : opc-90 ( bcc )   ." 90 not coded yet" ; 
 : opc-91 ( sta.diy )   ." 91 not coded yet" ; 
 : opc-92 ( sta.di )   ." 92 not coded yet" ; 
@@ -476,10 +487,10 @@ cr .( Defining opcode routines ... )
 : opc-9C ( stz )  0  mode.abs  store.a ;  \ TODO TESTME
 : opc-9D ( sta.x )   ." 9D not coded yet" ; 
 : opc-9E ( stz.x )   ." 9E not coded yet" ; 
-: opc-9F ( sta.lx )   ." 9F not coded yet" ; 
-: opc-A0 ( ldy.# )  PC24 fetch.xy  Y !  check-NZ.y  PC+fetch.xy ;
+: opc-9F ( sta.lx ) dup  mode.lx  store.a ; \ TODO TESTME
+: opc-A0 ( ldy.# )  PC24 fetch.xy  check-NZ.y  Y !  PC+fetch.xy ; \ TODO TESTME
 : opc-A1 ( lda.dxi )   ." A1 not coded yet" ; 
-: opc-A2 ( ldx.# )  PC24 fetch.xy  X !  check-NZ.x  PC+fetch.xy ;
+: opc-A2 ( ldx.# )  PC24 fetch.xy  check-NZ.x  X !  PC+fetch.xy ; \ TODO TESTME
 : opc-A3 ( lda.s )   ." A3 not coded yet" ; 
 : opc-A4 ( ldy.d )   ." A4 not coded yet" ; 
 : opc-A5 ( lda.d )   ." A5 not coded yet" ; 
@@ -489,10 +500,10 @@ cr .( Defining opcode routines ... )
 : opc-A9 ( lda.# ) drop  PC24 fetch.a  check-NZ.a  PC+fetch.a ; 
 : opc-AA ( tax )  dup x-flag set? if mask8 else mask16 then  X !  check-NZ.x ; 
 : opc-AB ( plb )   ." AB not coded yet" ; 
-: opc-AC ( ldy )   ." AC not coded yet" ; 
-: opc-AD ( lda )   ." AD not coded yet" ; 
-: opc-AE ( ldx )   ." AE not coded yet" ; 
-: opc-AF ( lda.l )   ." AF not coded yet" ; 
+: opc-AC ( ldy )  mode.abs  fetch.xy  check-NZ.a  Y !  PC+fetch.xy ;  \ TODO TESTME
+: opc-AD ( lda )  drop  mode.abs  fetch.a  check-NZ.a PC+fetch.a ; \ TODO TESTME
+: opc-AE ( ldx )  mode.abs  fetch.xy  check-NZ.a  X !  PC+fetch.xy ;  \ TODO TESTME
+: opc-AF ( lda.l ) drop mode.l  fetch.a  check-NZ.a PC+fetch.a ; \ TODO TESTME
 : opc-B0 ( bcs )   ." B0 not coded yet" ; 
 : opc-B1 ( lda.diy )   ." B1 not coded yet" ; 
 : opc-B2 ( lda.di )   ." B2 not coded yet" ; 
@@ -509,7 +520,7 @@ cr .( Defining opcode routines ... )
 : opc-BC ( ldy.x )   ." BC not coded yet" ; 
 : opc-BD ( lda.x )   ." BD not coded yet" ; 
 : opc-BE ( ldx.y )   ." BE not coded yet" ; 
-: opc-BF ( lda.lx )   ." BF not coded yet" ; 
+: opc-BF ( lda.lx )  drop mode.lx  fetch.a check-NZ.a  PC+fetch.a ; \ TODO TESTME
 : opc-C0 ( cpy.# )   ." C0 not coded yet" ; 
 : opc-C1 ( cmp.dxi )   ." C1 not coded yet" ; 
 : opc-C2 ( rep ) \ TODO crude testing version, complete this for all flags

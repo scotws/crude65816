@@ -1,13 +1,20 @@
 TODO for A Crude 65816 Emulator
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 27. May 2015
-This version: 27. May 2015
+This version: 30. May 2015
 
 
-TODO 
+TODO SHORT TERM
 
+- Code all opcodes before doing anything else
+
+
+TODO LONG TERM 
+
+- Add FREEZE/THAW commands to save state of emulator to disk
 
 
 QUESTIONS 
 
 - TSC: We always copy the complete Stack Pointer to the Accumulator, regardless if A is 16 or 8 bits. However, does the N flag react to the 16th or 8th bit, or is it always affected by the 16th bit as well?
+

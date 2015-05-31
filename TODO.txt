@@ -1,12 +1,13 @@
 TODO for A Crude 65816 Emulator
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 27. May 2015
-This version: 30. May 2015
+This version: 31. May 2015
 
 
 TODO SHORT TERM
 
 - Code all opcodes before doing anything else
+- See if we should include PC+1 in next1byte, PC+2 in next2bytes, etc. 
 
 
 TODO LONG TERM 

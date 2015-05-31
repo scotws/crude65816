@@ -109,9 +109,10 @@ include config.fs
 \ Fetch from memory 
 defer fetch.a   defer fetch.xy
 
-\ Get one byte or double byte out of memory. Double bytes assume 
-\ little-endian storage in memory but returns it to the Forth data 
-\ stack in "normal" big endian format
+\ Get one byte, a double byte, or three bytes from any 24-bit 
+\ memory address. Double bytes assume  little-endian storage 
+\ in memory but returns it to the Forth data stack in "normal" 
+\ big endian format
 : fetch8  ( 65addr24 -- u8 )  memory +  c@ ; 
 : fetch16  ( 65addr24 -- u16 )  dup fetch8  swap 1+  fetch8  lsb/msb>16 ; 
 : fetch24  ( 65addr24 -- u24 ) ." fetch24 not coded yet" ; \ TODO 
@@ -123,10 +124,10 @@ defer store.a   defer store.xy
 : store16 ( u16 65addr24 -- ) \ store LSB first
    2dup swap lsb swap store8  swap msb swap 1+ store8 ; 
 
-\ Read current byte in stream. Note we use PBR, not DBR
-: fetch1byte ( -- u8 )  PC24 fetch8 ; 
-: fetch2bytes ( -- u16 )  PC24 fetch16 ; 
-: fetch3bytes ( -- u24 ) PC24 fetch24 ; 
+\ Read current bytes in stream. Note we use PBR, not DBR
+: next1byte ( -- u8 )  PC24 fetch8 ; 
+: next2bytes ( -- u16 )  PC24 fetch16 ; 
+: next3bytes ( -- u24 )  PC24 fetch24 ; 
 
 
 \ ---- FLAGS ----
@@ -286,17 +287,32 @@ cr .( Defining addressing modes ...)
 \ some are easier to code by hand. 
 
 \ absolute 
-: mode.abs ( -- 65addr24 ) fetch2bytes mem16>24 PC+2 ;
+: mode.abs ( -- 65addr24 )  next2bytes mem16>24 PC+2 ;
 
 \ absolute x/y indexed
-: mode.x  ( -- 65addr24 ) mode.abs  x @  + ; \ TODO handle overflow TESTME
-: mode.y  ( -- 65addr24 ) mode.abs  y @  + ; \ TODO handle overflow TESTME
+: mode.x  ( -- 65addr24 )  mode.abs  X @  + ; \ TODO handle overflow TESTME
+: mode.y  ( -- 65addr24 )  mode.abs  Y @  + ; \ TODO handle overflow TESTME
 
 \ absolute long 
-: mode.l  ( -- 65addr24)  fetch3bytes mem16>24 PC+3 ; \ TODO TESTME
+: mode.l  ( -- 65addr24)  next3bytes  PC+3 ; \ TODO TESTME
 
 \ absolute long x indexed
-: mode.lx ( -- 65addr24)  mode.l  x @ + ; \ TODO handle overflow TESTME 
+: mode.lx ( -- 65addr24)  mode.l  X @  + ; \ TODO handle overflow TESTME 
+
+\ direct page
+: mode.d ( -- 65addr24)  \ TODO TESTME handle page boundries
+   next1byte  D @  +  00  mem16/bank>24  PC+1 ;
+
+\ direct page indirect. Note this uses the Data Bank Register (DBR)
+: mode.di  ( -- 65addr24)  \ TODO TESTME handle page boundries 
+   next1byte  D @  +  DBR  mem16/bank>24  fetch16  PC+1 ;
+
+\ direct page indirect long. 
+   mode.d  fetch24 ;  \ TODO TESTME handle page boundries 
+
+\ absolute indirect
+\ TODO handle page boundries TESTME
+: mode.i  ( -- 65addr24)  mode.abs  fetch16  mem16>24 ;
 
 
 
@@ -402,7 +418,7 @@ cr .( Defining opcode routines ... )
 : opc-49 ( eor.# )  PC24 fetch.a  eor.a  check-NZ.a  PC+fetch.a ; \ TODO TESTME
 : opc-4A ( lsr.a )   ." 4A not coded yet" ; 
 : opc-4B ( phk )   ." 4B not coded yet" ; 
-: opc-4C ( jmp )  fetch2bytes  PC ! ;
+: opc-4C ( jmp )  next2bytes  PC ! ;
 : opc-4D ( eor )  mode.abs  fetch.a  eor.a  check-NZ.a ;  \ TODO TESTME
 : opc-4E ( lsr )   ." 4E not coded yet" ; 
 : opc-4F ( eor.l )  mode.l  fetch.a  eor.a  check-NZ.a ; \ TODO TESTME
@@ -418,7 +434,7 @@ cr .( Defining opcode routines ... )
 : opc-59 ( eor.y )   ." 59 not coded yet" ; 
 : opc-5A ( phy )   ." 5A not coded yet" ; 
 : opc-5B ( tcd )  dup  mask16  D ! check-NZ.a ; \ mask16 is paranoid
-: opc-5C ( jmp.l )   opc-4C  fetch1byte PBR !  PC+3 ; \ TODO TESTME
+: opc-5C ( jmp.l )   opc-4C  next1byte PBR !  PC+3 ; \ TODO TESTME
 : opc-5D ( eor.dx )   ." 5D not coded yet" ; 
 : opc-5E ( lsr.x )   ." 5E not coded yet" ; 
 : opc-5F ( eor.lx ) mode.lx  fetch.a  eor.a  check-NZ.a ; \ TODO TESTME
@@ -525,7 +541,7 @@ cr .( Defining opcode routines ... )
 : opc-C1 ( cmp.dxi )   ." C1 not coded yet" ; 
 : opc-C2 ( rep ) \ TODO crude testing version, complete this for all flags
    cr ." WARNING: REP is incomplete, works only on m and x flags" cr
-   fetch1byte 
+   next1byte 
    dup  20 = if a->16 else 
    dup  10 = if xy->16  else 
    dup  30 = if a->16 xy->16 then then then drop 
@@ -565,7 +581,7 @@ cr .( Defining opcode routines ... )
 : opc-E1 ( sbc.dxi )  ." E1 not coded yet" ; 
 : opc-E2 ( sep ) \ TODO crude testing version, complete this for all flags
    cr ." WARNING: SEP is incomplete, works only on m and x flags" cr
-   fetch1byte 
+   next1byte 
    dup  20 = if a->8 else 
    dup  10 = if xy->8  else 
    dup  30 = if a->8 xy->8 then then then drop 
@@ -654,7 +670,7 @@ cr .( Setting up interrupts ...)
 
 \ Increase PC before executing instruction so we are pointing at the
 \ operand (if available)
-: step ( -- )  opc-jumptable fetch1byte cells +  @    PC+1   execute ; 
+: step ( -- )  opc-jumptable next1byte cells +  @    PC+1   execute ; 
 : run ( -- )   begin step again ; 
 
 \ ---- START EMULATION ----

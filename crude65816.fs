@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 30. May 2015  
+\ This version: 31. May 2015  
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version pre-ALPHA  26. May 2015) 
+cr .( Version pre-ALPHA  31. May 2015) 
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -213,7 +213,6 @@ defer ora.a
 : ora16 ( u16 -- u16 )  or mask16 ; \ paranoid 
 
 
-
 \ ---- REGISTER MODE SWITCHES ----
 
 \ Switch accumulator 8<->16 bit (p. 51 in Manual)
@@ -306,9 +305,6 @@ cr .( Defining addressing modes ...)
 \ direct page indirect. Note this uses the Data Bank Register (DBR)
 : mode.di  ( -- 65addr24)  \ TODO TESTME handle page boundries 
    next1byte  D @  +  DBR  mem16/bank>24  fetch16  PC+1 ;
-
-\ direct page indirect long. 
-   mode.d  fetch24 ;  \ TODO TESTME handle page boundries 
 
 \ absolute indirect
 \ TODO handle page boundries TESTME

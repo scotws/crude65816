@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 31. May 2015  
+\ This version: 01. June 2015  
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version pre-ALPHA  31. May 2015) 
+cr .( Version pre-ALPHA  01. June 2015) 
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -69,6 +69,11 @@ variable PBR   \ Program Bank register ("K") (8 bit)
 : mem16/bank>24  ( 65addr16 bank -- 65addr24 )  10 lshift or ; 
 : mem8>24  ( lsb msb bank -- 65addr24 )  -rot lsb/msb>16 swap mem16/bank>24 ; 
 
+\ Handle wrapping for 8-bit and 16-bit additions TODO TESTME 
+\ TODO See if we want to changed the c-flag directly
+: wrap8&c ( u -- u8 f )  dup  mask8 swap  maskmsb  0= invert ; 
+: wrap16&c ( u -- u16 f ) dup mask16 swap  0ff0000 and  0= invert ; 
+
 \ handle Program Counter
 : PC+u ( u -- ) ( -- )   
    create ,
@@ -112,10 +117,12 @@ defer fetch.a   defer fetch.xy
 \ Get one byte, a double byte, or three bytes from any 24-bit 
 \ memory address. Double bytes assume  little-endian storage 
 \ in memory but returns it to the Forth data stack in "normal" 
-\ big endian format
+\ big endian format. Note we don't advance the PC here
+\ TODO decide if we want to advance the PC here 
 : fetch8  ( 65addr24 -- u8 )  memory +  c@ ; 
-: fetch16  ( 65addr24 -- u16 )  dup fetch8  swap 1+  fetch8  lsb/msb>16 ; 
-: fetch24  ( 65addr24 -- u24 ) ." fetch24 not coded yet" ; \ TODO 
+: fetch16  ( 65addr24 -- u16 )  dup fetch8  swap 1+ fetch8  lsb/msb>16 ; 
+: fetch24  ( 65addr24 -- u24 )  dup fetch8  over 1+ fetch8  
+   rot 2+ fetch8  mem8>24 ; 
 
 \ Store to memory 
 defer store.a   defer store.xy

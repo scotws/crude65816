@@ -122,7 +122,7 @@ defer fetch.a   defer fetch.xy
 : fetch8  ( 65addr24 -- u8 )  memory +  c@ ; 
 : fetch16  ( 65addr24 -- u16 )  dup fetch8  swap 1+ fetch8  lsb/msb>16 ; 
 : fetch24  ( 65addr24 -- u24 )  dup fetch8  over 1+ fetch8  
-   rot 2+ fetch8  mem8>24 ; 
+   rot 2 + fetch8  mem8>24 ; 
 
 \ Store to memory 
 defer store.a   defer store.xy

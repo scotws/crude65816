@@ -65,8 +65,8 @@ variable PBR   \ Program Bank register ("K") (8 bit)
 : lsb/msb>16 ( lsb msb -- u16 )  8 lshift or ; 
 
 \ Convert various combinations to full 24 bit address. Assumes HEX 
-: mem16>24  ( 65addr16 -- 65addr24 )  PBR @  10 lshift or ; 
 : mem16/bank>24  ( 65addr16 bank -- 65addr24 )  10 lshift or ; 
+: mem16>24  ( 65addr16 -- 65addr24 )  PBR @  mem16/bank>24 ; 
 : mem8>24  ( lsb msb bank -- 65addr24 )  -rot lsb/msb>16 swap mem16/bank>24 ; 
 
 \ Handle wrapping for 8-bit and 16-bit additions TODO TESTME 
@@ -92,13 +92,14 @@ defer PC+fetch.a   defer PC+fetch.xy
 
 
 \ ---- MEMORY ----
+
 \ All accesses to memory are always full 24 bit. Stack follows little-endian
 \ format with bank on top, then msb and lsb ( lsb msb bank -- ) 
 cr .( Creating memory ...) 
 
 \ We just allot the whole possible memory range. Note that this will fail
 \ unless you called Gforth with "-m 1G" or something of that size like you
-\ were told in the MANUAL.txt
+\ were told in the MANUAL.txt . You did read the manual, didn't you?
 create memory 16M allot
 
 : loadrom ( 65addr24 addr u -- )

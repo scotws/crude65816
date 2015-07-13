@@ -1,7 +1,7 @@
 Manual for A Crude 65816 Emulator 
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 09. Jan 2015
-This version: 27. May 2015
+This version: 13. July 2015
 
 
 THIS DOCUMENT IS CURRENTLY MERELY A COLLECTION OF NOTES. WHEN IN DOUBT, USE THE SOURCE CODE. 
@@ -70,7 +70,7 @@ Note that currently most interrupt routines are not functional.
 
 NAMES OF MODES 
 
-The Crude Emulator internally uses an assembler variant called "Typist's Assembler", see https://github.com/scotws/tasm65c02 for the 6502 version. At some point, there will probably be a matching assembler for the 65816. Typist's Assembler works better for ten-finger typing and puts the operand in front of the opcode, making it easier to work with a prefix language such as Forth.
+The Crude Emulator internally uses an assembler variant called "Typist's Assembler", see https://github.com/scotws/tasm65816 . Typist's Assembler works better for ten-finger typing and puts the operand in front of the opcode, making it easier to work with a prefix language such as Forth.
 
     MODE                      WDC SYNTAX       TYPIST'S SYNTAX
 

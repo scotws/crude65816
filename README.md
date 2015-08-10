@@ -4,7 +4,7 @@ Scot W. Stevenson <scot.stevenson@gmail.com>
 
 First version: 08. Jan 2015
 
-This version: 25. May 2015
+This version: 10. Aug 2015
 
 
 ### TL;DR
@@ -49,7 +49,7 @@ one of the main reasons for switching to the 65816 is to be able to do more with
 Forth. In fact, the Crude Emulator relies on modern hardware to work and just
 assumes we have enough RAM and a fast processor for everything. 
 
-See `MANUAL.txt` for further information.
+See `docs/MANUAL.txt` for further information.
 
 ### DEVELOPMENT
 

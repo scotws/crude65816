@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 01. June 2015  
+\ This version: 30. July 2015  
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version pre-ALPHA  01. June 2015) 
+cr .( Version pre-ALPHA 30. July 2015) 
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -97,9 +97,9 @@ defer PC+fetch.a   defer PC+fetch.xy
 \ format with bank on top, then msb and lsb ( lsb msb bank -- ) 
 cr .( Creating memory ...) 
 
-\ We just allot the whole possible memory range. Note that this will fail
-\ unless you called Gforth with "-m 1G" or something of that size like you
-\ were told in the MANUAL.txt . You did read the manual, didn't you?
+\ We just allot the whole possible memory range. Note that this will fail unless
+\ you called Gforth with "-m 1G" or something of that size like you were told in
+\ the MANUAL.txt . You did read the manual, didn't you?
 create memory 16M allot
 
 : loadrom ( 65addr24 addr u -- )
@@ -112,13 +112,17 @@ create memory 16M allot
 cr .( Loading ROM files to memory ...) 
 include config.fs  
 
+\ set up I/O stuff. Must be loaded after config.fs
+cr .( Setting up I/O system ...)
+include io.fs
+
 \ Fetch from memory 
 defer fetch.a   defer fetch.xy
 
-\ Get one byte, a double byte, or three bytes from any 24-bit 
-\ memory address. Double bytes assume  little-endian storage 
-\ in memory but returns it to the Forth data stack in "normal" 
-\ big endian format. Note we don't advance the PC here
+\ Get one byte, a double byte, or three bytes from any 24-bit memory address.
+\ Double bytes assume  little-endian storage in memory but returns it to the
+\ Forth data stack in "normal" big endian format. Note we don't advance the PC
+\ here 
 \ TODO decide if we want to advance the PC here 
 : fetch8  ( 65addr24 -- u8 )  memory +  c@ ; 
 : fetch16  ( 65addr24 -- u16 )  dup fetch8  swap 1+ fetch8  lsb/msb>16 ; 
@@ -289,9 +293,9 @@ defer ora.a
 \ ---- ADDRESSING MODES --- 
 cr .( Defining addressing modes ...) 
 
-\ Note that the opcodes for Absolute Mode have no suffix, but we use
-\ "mode.abs" for clarity. Note that not all modes are listed here, as 
-\ some are easier to code by hand. 
+\ Note that the mnemonics for Absolute Mode have no suffix, but we use "mode.abs"
+\ for clarity. Note that not all modes are listed here, as some are easier to
+\ code by hand. 
 
 \ absolute 
 : mode.abs ( -- 65addr24 )  next2bytes mem16>24 PC+2 ;
@@ -331,6 +335,7 @@ cr .( Defining addressing modes ...)
 : .mask16 ( n -- addr u )  s>d <# # # # # #> type space ; 
 
 \ Print state of machine 
+\ TODO see about a more elegant solution once we have stuff the way we want it
 : .state ( -- )
    cr  e-flag set? if
       ."  PC   K  BA    X    Y    S    D   B NV-BDIZC" else

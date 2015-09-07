@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 03. Sep 2015
+\ This version: 07. Sep 2015
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version pre-ALPHA 03. Sep 2015)  
+cr .( Version pre-ALPHA  07. Sep 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -29,7 +29,7 @@ hex
 
 \ TODO make sure we even need all of this 
 400 constant 1k       1k 8 * constant 8k       8k 2* constant 16k
-16k 8 * constant 64k  64k 100 * constant 16M   64k constant bank 
+16k 8 * constant 64k  64k 100 * constant 16M
 
 
 \ ---- HARDWARE: CPU ----
@@ -57,18 +57,23 @@ variable PBR   \ Program Bank register ("K") (8 bit)
 : maskmsb ( u16 -- u16 ) 0ff00 and ; \ used for B register 
 
 \ return least, most significant byte of 16-bit number
-: lsb ( u16 -- u8 )  mask8 ;
-: msb ( u16 -- u8 )  maskmsb  8 rshift ;
+: lsb ( u -- u8 )  mask8 ;
+: msb ( u -- u8 )  maskmsb  8 rshift ;
+: bank ( u -- u8 )  10 rshift  mask8 ; \ assumes HEX
 
 \ 16 bit addresses and endian conversion. Assumes MSB is TOS
 : 16>lsb/msb ( u16 -- lsb msb  )  dup lsb swap msb ; 
 : lsb/msb>16 ( lsb msb -- u16 )  8 lshift or ; 
 
-\ 24 bit to three bytes TODO testme
+\ 24 bit to three bytes
 : 24>bank/msb/lsb  ( u24 -- bank msb lsb )  
    dup 16>lsb/msb      ( u24 lsb msb )  
    swap rot            ( msb lsb u24 ) 
    bank -rot ;         ( bank msb lsb ) 
+
+: 24>lsb/msb/bank  ( u24 -- lsb msb bank ) 
+   dup 16>lsb/msb      ( n lsb msb ) 
+   rot bank ;          ( lsb msb bank) 
 
 \ Convert various combinations to full 24 bit address. Assumes HEX 
 : mem16/bank>24  ( 65addr16 bank -- 65addr24 )  10 lshift or ; 
@@ -233,13 +238,9 @@ defer ora.a
 
 
 \ --- STACK STUFF ----
-\
 cr .( Setting up Stack ...)
-\ TODO These can all be optimized for speed at some point, but not now
 
-\ TODO initiate stack after RESET etc
-
-\ increase stack pointer TODO test
+\ increase stack pointer 
 defer S++
 : S++8 ( -- )  S @  1+  mask8  0100 OR  S ! ; 
 : S++16 ( -- )  S @  1+  mask16  S ! ; 
@@ -249,12 +250,16 @@ defer S--
 : S--8 ( -- )  S @  1-  mask8  0100 OR  S ! ; 
 : S--16 ( -- )  S @  1-  mask16  S ! ; 
 
-\ push stuff to stack TODO test
+\ push stuff to stack. Note these destroy the top of the Forth stack so they
+\ require a DUP for each 65816 stack instruction. We don't want to include DUP
+\ here because we push other stuff than just A 
+defer push
 : push8 ( n8 -- )  S @  store8  S-- ; 
 : push16 ( n16 -- ) 16>lsb/msb push8 push8 ; 
 : push24 ( n24 -- ) 24>bank/msb/lsb  rot push8  swap push8  push8 ; 
 
-\ pull stuff from stack TODO test
+\ pull stuff from stack 
+defer pull
 : pull8 ( -- n8 )  S++  S @  fetch8 ;  
 : pull16 ( -- n16 )  pull8 pull8  lsb/msb>16 ; 
 : pull24 ( -- n24 )  ." PULL24 not coded yet" ; \ TODO 
@@ -313,6 +318,8 @@ defer S--
    ['] status-r16 is status-r 
    ['] S++16 is S++
    ['] S--16 is S--
+   ['] push16 is push 
+   ['] pull16 is pull
 
    \ TODO set direct page to 16 zero page
    ; 
@@ -322,6 +329,8 @@ defer S--
    ['] status-r8 is status-r 
    ['] S++8 is S++
    ['] S--8 is S--
+   ['] push8 is push 
+   ['] pull8 is pull
    a->8   xy->8  
    S @  00FF AND  0100 OR  S ! \ stack pointer to 0100
    0 D !  \ direct page register initialized to zero 
@@ -379,9 +388,9 @@ cr .( Defining addressing modes ...)
 \ TODO see about a more elegant solution once we have stuff the way we want it
 : .state ( -- )
    cr  e-flag set? if
+\     ." xxxx xx xxxx xxxx xxxx xxxx xxxx xx xxxxxxxx" 
       ."  PC   K  BA    X    Y    S    D   B NV-BDIZC" else
       ."  PC   K   C    X    Y    S    D   B NVMXDIZC" then cr 
- \    ." xxxx xx xxxx xxxx xxxx xxxx xxxx xx xxxxxxxx" 
 
    PC @ .mask16   PBR @ .mask8   dup .mask16   X @ .mask16 
    Y @ .mask16    S @ .mask16    D @ .mask16   DBR @ .mask8
@@ -389,18 +398,15 @@ cr .( Defining addressing modes ...)
    e-flag set? if ." emulated" else ." native" then  cr ; 
 
 \ Print stack if we are in emulation mode
+: stackempty? ( -- f )  S @  01ff  = ; 
 : .stack ( -- )
    cr  e-flag clear? if
          ." Can't dump stack when in native mode (yet)"
       else
-         S @  01FF  = if  
-            ." Stack is empty (S is 01FF)" cr  
-         else
-            0200  S @ 1+ ?do
-               i dup  . space  fetch8 . cr  
-            loop 
-         then 
-      then ; 
+         stackempty? if  
+            ." Stack is empty (S is 01FF in emulation mode)" cr  else
+         0200  S @ 1+  ?do  i dup .  space  fetch8 .  cr  loop 
+      then then ; 
    
 
 \ ---- OPCODE ROUTINES ----
@@ -746,6 +752,8 @@ cr .( Setting up interrupts ...)
 \ ---- START EMULATION ----
 cr .( All done.) cr 
 
+\ Note that we currently cheat here using RESET as the situation after boot,
+\ which is not technically correct
 reset-i 
 .state 
 

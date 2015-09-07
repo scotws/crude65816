@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 30. July 2015  
+\ This version: 03. Sep 2015
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version pre-ALPHA 30. July 2015) 
+cr .( Version pre-ALPHA 03. Sep 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -27,7 +27,7 @@ cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 cr .( Defining general stuff ...)
 hex
 
-\ TODO make sure we even need this 
+\ TODO make sure we even need all of this 
 400 constant 1k       1k 8 * constant 8k       8k 2* constant 16k
 16k 8 * constant 64k  64k 100 * constant 16M   64k constant bank 
 
@@ -63,6 +63,12 @@ variable PBR   \ Program Bank register ("K") (8 bit)
 \ 16 bit addresses and endian conversion. Assumes MSB is TOS
 : 16>lsb/msb ( u16 -- lsb msb  )  dup lsb swap msb ; 
 : lsb/msb>16 ( lsb msb -- u16 )  8 lshift or ; 
+
+\ 24 bit to three bytes TODO testme
+: 24>bank/msb/lsb  ( u24 -- bank msb lsb )  
+   dup 16>lsb/msb      ( u24 lsb msb )  
+   swap rot            ( msb lsb u24 ) 
+   bank -rot ;         ( bank msb lsb ) 
 
 \ Convert various combinations to full 24 bit address. Assumes HEX 
 : mem16/bank>24  ( 65addr16 bank -- 65addr24 )  10 lshift or ; 
@@ -122,8 +128,7 @@ defer fetch.a   defer fetch.xy
 \ Get one byte, a double byte, or three bytes from any 24-bit memory address.
 \ Double bytes assume  little-endian storage in memory but returns it to the
 \ Forth data stack in "normal" big endian format. Note we don't advance the PC
-\ here 
-\ TODO decide if we want to advance the PC here 
+\ here so we can use these routines with stuff like stack manipulations
 : fetch8  ( 65addr24 -- u8 )  memory +  c@ ; 
 : fetch16  ( 65addr24 -- u16 )  dup fetch8  swap 1+ fetch8  lsb/msb>16 ; 
 : fetch24  ( 65addr24 -- u24 )  dup fetch8  over 1+ fetch8  
@@ -135,6 +140,7 @@ defer store.a   defer store.xy
 : store8 ( u8 65addr24 -- ) memory +  c! ;
 : store16 ( u16 65addr24 -- ) \ store LSB first
    2dup swap lsb swap store8  swap msb swap 1+ store8 ; 
+: store24 ( u24 65addr25 -- ) ." STORE24 not coded yet" ; \ TODO
 
 \ Read current bytes in stream. Note we use PBR, not DBR
 : next1byte ( -- u8 )  PC24 fetch8 ; 
@@ -143,6 +149,7 @@ defer store.a   defer store.xy
 
 
 \ ---- FLAGS ----
+
 \ All flags are fully formed Forth flags (one cell large) 
 cr .( Setting up flag routines ... ) 
 
@@ -225,6 +232,37 @@ defer ora.a
 : ora16 ( u16 -- u16 )  or mask16 ; \ paranoid 
 
 
+\ --- STACK STUFF ----
+\
+cr .( Setting up Stack ...)
+\ TODO These can all be optimized for speed at some point, but not now
+
+\ TODO initiate stack after RESET etc
+
+\ increase stack pointer TODO test
+defer S++
+: S++8 ( -- )  S @  1+  mask8  0100 OR  S ! ; 
+: S++16 ( -- )  S @  1+  mask16  S ! ; 
+
+\ decrease stack pointer, hardcoding 01 as MSB of pointer  TODO test
+defer S--
+: S--8 ( -- )  S @  1-  mask8  0100 OR  S ! ; 
+: S--16 ( -- )  S @  1-  mask16  S ! ; 
+
+\ push stuff to stack TODO test
+: push8 ( n8 -- )  S @  store8  S-- ; 
+: push16 ( n16 -- ) 16>lsb/msb push8 push8 ; 
+: push24 ( n24 -- ) 24>bank/msb/lsb  rot push8  swap push8  push8 ; 
+
+\ pull stuff from stack TODO test
+: pull8 ( -- n8 )  S++  S @  fetch8 ;  
+: pull16 ( -- n16 )  pull8 pull8  lsb/msb>16 ; 
+: pull24 ( -- n24 )  ." PULL24 not coded yet" ; \ TODO 
+   
+
+\ HIER HIER 
+
+
 \ ---- REGISTER MODE SWITCHES ----
 
 \ Switch accumulator 8<->16 bit (p. 51 in Manual)
@@ -273,15 +311,18 @@ defer ora.a
 : go-native ( -- )  
    e-flag clear
    ['] status-r16 is status-r 
+   ['] S++16 is S++
+   ['] S--16 is S--
 
-   \ TODO set stack pointer to 16 bits
    \ TODO set direct page to 16 zero page
    ; 
 
 : go-emulated ( -- )  
-   ['] status-r8 is status-r 
-   a->8   xy->8  
    e-flag set   
+   ['] status-r8 is status-r 
+   ['] S++8 is S++
+   ['] S--8 is S--
+   a->8   xy->8  
    S @  00FF AND  0100 OR  S ! \ stack pointer to 0100
    0 D !  \ direct page register initialized to zero 
    \ TODO clear b-flag ?
@@ -347,7 +388,21 @@ cr .( Defining addressing modes ...)
    status-r .8bits  space 
    e-flag set? if ." emulated" else ." native" then  cr ; 
 
+\ Print stack if we are in emulation mode
+: .stack ( -- )
+   cr  e-flag clear? if
+         ." Can't dump stack when in native mode (yet)"
+      else
+         S @  01FF  = if  
+            ." Stack is empty (S is 01FF)" cr  
+         else
+            0200  S @ 1+ ?do
+               i dup  . space  fetch8 . cr  
+            loop 
+         then 
+      then ; 
    
+
 \ ---- OPCODE ROUTINES ----
 cr .( Defining opcode routines ... ) 
 
@@ -659,18 +714,23 @@ cr .( Setting up interrupts ...)
 0fffc constant reset-v   \ same for emulated and native
 0fffe constant irq-e-v
 
+\ RESET (s. page 201) 
 : reset-i ( -- ) 
    go-emulated
    00  \ TOS is A
    \ TODO Set flags
-   00 X !   00 Y !  00 PBR !  00 DBR ! 
-   reset-v fetch16  PC ! ; 
+   00 X !   00 Y !  00 PBR !  00 DBR !  00 D ! 
+   reset-v fetch16  PC ! 
+   \ RESET and power on set the MSB of the S to $01 but don't put the LSB
+   \ in a defined state (http://forum.6502.org/viewtopic.php?f=4&t=2258) 
+   S @  mask8  0100 OR  S ! ; \ TODO check if we keep LSB
 
 : irq-i ( -- ) ." IRQ routine not programmed yet" ; \ TODO 
 : nmi-i ( -- ) ." NMI routine not programmed yet" ; \ TODO 
 : abort-i ( -- ) ." ABORT routine not programmed yet" ; \ TODO 
 : brk-i ( -- ) ." BREAK routine not programmed yet" ; \ TODO 
 : cop-i ( -- ) ." COP routine not programmed yet" ; \ TODO 
+
 
 \ ---- MAIN CONTROL ----
 \ Single-step through the program, or run emulation. To start at a given
@@ -681,6 +741,7 @@ cr .( Setting up interrupts ...)
 \ operand (if available)
 : step ( -- )  opc-jumptable next1byte cells +  @    PC+1   execute ; 
 : run ( -- )   begin step again ; 
+
 
 \ ---- START EMULATION ----
 cr .( All done.) cr 

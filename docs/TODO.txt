@@ -1,7 +1,7 @@
 TODO for A Crude 65816 Emulator
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 27. May 2015
-This version: 13. Aug 2015
+This version: 08. Sep 2015
 
 
 TODO SHORT TERM
@@ -18,8 +18,4 @@ TODO LONG TERM
 
 QUESTIONS 
 
-- TSC: We always copy the complete Stack Pointer to the Accumulator, regardless if A is 16 or 8 bits. However, does the N flag react to the 16th or 8th bit, or is it always affected by the 16th bit as well?
-
-- What happens to the LSB of the Stack Pointer during RESET after being in Native Mode? See 
-http://forum.6502.org/viewtopic.php?t=468&sid=ccdf15a560f1520a347ba896ae89767f
 

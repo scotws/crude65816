@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version pre-ALPHA  07. Sep 2015)  
+cr .( Version pre-ALPHA  08. Sep 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -349,6 +349,8 @@ defer pull.xy
 : emulated ( -- )  
    e-flag set   
    ['] status-r8 is status-r 
+   \ We explicitly change the status flags M and X eben though we don't see them
+   \ because we use them internally to figure out the size of the registers
    a->8   xy->8  
    S @  00FF AND  0100 OR  S ! \ stack pointer to 0100
    0 D !  \ direct page register initialized to zero 
@@ -403,14 +405,43 @@ cr .( Defining addressing modes ...)
 : .mask16 ( n -- addr u )  s>d <# # # # # #> type space ; 
 
 \ Print state of machine 
+\ TODO rewrite this once we know what we really want to see
 : .state ( -- )
-   cr  e-flag set? if
-\     ." xxxx xx xxxx xxxx xxxx xxxx xxxx xx xxxxxxxx" 
-      ."  PC   K  BA    X    Y    S    D   B NV-BDIZC" else
-      ."  PC   K   C    X    Y    S    D   B NVMXDIZC" then cr 
 
-   PC @ .mask16   PBR @ .mask8   dup .mask16   X @ .mask16 
-   Y @ .mask16    S @ .mask16    D @ .mask16   DBR @ .mask8
+   \ Print status line 
+   \  ." xxxx xx "
+   cr ."  PC   K "
+
+   m-flag set?  e-flag set?  or  if 
+   \  ." xx xx "
+      ."  B  A " else
+   \  ." xxxx "
+      ."   C  " then 
+   
+   x-flag set?  e-flag set?  or  if 
+   \  ." xx xx "
+      ."  X  Y " else
+   \  ." xxxx xxxx "
+      ."   X    Y  " then 
+ 
+   e-flag set? if 
+   \  ." xxxx xxxx xx xxxxxxxx" 
+      ."   S    D   B NV-BDIZC" else
+      ."   S    D   B NVMXDIZC" then cr 
+
+   PC @ .mask16  PBR @ .mask8   
+   
+   \ print A/B or C
+   dup 
+   m-flag set?  e-flag set?  or  if  
+      dup msb .mask8 lsb .mask8 else
+      .mask16 then
+
+   \ print XY
+   Y @  X @
+   x-flag set? if .mask8 .mask8  else  .mask16 .mask16  then 
+   
+   S @ .mask16  D @ .mask16  DBR @ .mask8
    status-r .8bits  space 
    e-flag set? if ." emulated" else ." native" then  cr ; 
 
@@ -489,7 +520,8 @@ cr .( Defining opcode routines ... )
 : opc-38 ( sec )  c-flag set ;  
 : opc-39 ( and.y )   ." 39 not coded yet" ; 
 : opc-3A ( dec.a )   ." 3A not coded yet" ; 
-: opc-3B ( tsc )  drop  S @  mask16  check-NZ.a ; \ TODO check N behavior
+: opc-3B ( tsc )  \ p. 413, assumes N affected by 16th bit in all modes
+   drop  S @  mask16  check-NZ.a ; 
 : opc-3C ( bit.x )   ." 3C not coded yet" ; 
 : opc-3D ( and.x )   ." 3D not coded yet" ; 
 : opc-3E ( rol.x )   ." 3E not coded yet" ; 
@@ -609,7 +641,8 @@ cr .( Defining opcode routines ... )
 : opc-A6 ( ldx.d )   ." A6 not coded yet" ; 
 : opc-A7 ( lda.dil )   ." A7 not coded yet" ; 
 : opc-A8 ( tay )  dup x-flag set? if mask8 else mask16 then  Y !  check-NZ.y ; 
-: opc-A9 ( lda.# ) drop  PC24 fetch.a  check-NZ.a  PC+fetch.a ; 
+: opc-A9 ( lda.# ) \ TODO protect B in 8-bit mode!
+   drop  PC24 fetch.a  check-NZ.a  PC+fetch.a ; 
 : opc-AA ( tax )  dup x-flag set? if mask8 else mask16 then  X !  check-NZ.x ; 
 : opc-AB ( plb )   ." AB not coded yet" ; 
 : opc-AC ( ldy )  mode.abs  fetch.xy  check-NZ.a  Y !  PC+fetch.xy ;  \ TODO TESTME
@@ -626,8 +659,8 @@ cr .( Defining opcode routines ... )
 : opc-B7 ( lda.dy )   ." B7 not coded yet" ; 
 : opc-B8 ( clv ) v-flag clear ; 
 : opc-B9 ( lda.y )   ." B9 not coded yet" ; 
-: opc-BA ( tsx )  S @  x-flag set? if 00ff and else mask16 then  
-   X !  check-NZ.x ;  \ mask16 is paranoid TODO TESTME
+: opc-BA ( tsx )  \ p. 414
+   S @   x-flag set? if mask8 then  X !  check-NZ.x ;  
 : opc-BB ( tyx )  Y @  X !  check-NZ.x ;
 : opc-BC ( ldy.x )   ." BC not coded yet" ; 
 : opc-BD ( lda.x )   ." BD not coded yet" ; 
@@ -690,7 +723,7 @@ cr .( Defining opcode routines ... )
 : opc-E8 ( inx )   ." E8 not coded yet" ; 
 : opc-E9 ( sbc.# )   ." E9 not coded yet" ; 
 : opc-EA ( nop ) ;
-: opc-EB ( xba ) dup msb swap  lsb 8 lshift  or  check-NZ.a ;  \ TODO TESTME
+: opc-EB ( xba ) dup msb swap  lsb 8 lshift  or  check-NZ.a ;
 : opc-EC ( cpx )   ." EC not coded yet" ; 
 : opc-ED ( sbc )   ." ED not coded yet" ; 
 : opc-EE ( inc )   ." EE not coded yet" ; 

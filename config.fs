@@ -7,6 +7,7 @@
 \  00e000 s" testrom.bin" loadrom   \ test programs created with hex2rom.fs
    00e000 s" ../tasm65816/rom.bin" loadrom   \ test program from assembler
 \  010000 s" math8x8.bin" loadrom    \ multiplication tables 8 bit x 8 bit
+\  00e000 s" rom65c02.bin" loadrom  \ test program for the 65c02
 
 \  00e000 s" rom65816.bin" loadrom   \ operating system, BIOS, *DEFAULT*
 

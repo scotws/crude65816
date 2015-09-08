@@ -131,16 +131,28 @@ cr .( Setting up I/O system ...)
 include io.fs
 
 \ Fetch from memory 
-defer fetch.a   defer fetch.xy
+defer fetch.a   
+defer fetch.xy
 
 \ Get one byte, a double byte, or three bytes from any 24-bit memory address.
 \ Double bytes assume  little-endian storage in memory but returns it to the
 \ Forth data stack in "normal" big endian format. Note we don't advance the PC
 \ here so we can use these routines with stuff like stack manipulations
 : fetch8  ( 65addr24 -- u8 )  memory +  c@ ; 
-: fetch16  ( 65addr24 -- u16 )  dup fetch8  swap 1+ fetch8  msb/lsb>16 ; 
+: fetch16  ( 65addr24 -- u16 )  dup fetch8  swap 1+ fetch8  lsb/msb>16 ; 
 : fetch24  ( 65addr24 -- u24 )  dup fetch8  over 1+ fetch8  
    rot 2 + fetch8  lsb/msb/bank>24 ; 
+
+\ We need special FETCH commands for A because we have the current value TOS and
+\ we need to protect B if A is 8 bits wide
+\ 
+: fetch8.a ( u 65addr24 -- u16 ) 
+   memory + c@    ( u u8 ) 
+   swap 0ff00 and  or ; 
+
+: fetch16.a  ( u 65addr24 -- u16 ) 
+   nip fetch16 ; 
+
 
 \ Store to memory 
 defer store.a   
@@ -149,6 +161,7 @@ defer store.xy
 : store16 ( u16 65addr24 -- ) \ store LSB first
    2dup swap lsb swap store8  swap msb swap 1+ store8 ; 
 : store24 ( u24 65addr24 -- ) 
+\ TODO rewrite 
    >r               ( u24  R: 65addr ) 
    24>bank/msb/lsb  ( bank msb lsb  R: 65addr)
    r> dup 1+ >r     ( bank msb lsb 65addr  R: 65addr+1)
@@ -285,7 +298,7 @@ defer pull.xy
 \ Switch accumulator 8<->16 bit (p. 51 in Manual)
 \ Remember A is TOS 
 : a->16  ( -- )  
-   ['] fetch16 is fetch.a 
+   ['] fetch16.a is fetch.a  \ note special FETCH for A
    ['] store16 is store.a
    ['] PC+2 is PC+fetch.a
    ['] check-N.a16 is check-N.a
@@ -299,7 +312,7 @@ defer pull.xy
    m-flag clear ; 
 
 : a->8 ( -- )  
-   ['] fetch8 is fetch.a 
+   ['] fetch8.a is fetch.a   \ note special FETCH for A
    ['] store8 is store.a
    ['] PC+1 is PC+fetch.a
    ['] check-N.a8 is check-N.a
@@ -642,14 +655,13 @@ cr .( Defining opcode routines ... )
 : opc-A6 ( ldx.d )   ." A6 not coded yet" ; 
 : opc-A7 ( lda.dil )   ." A7 not coded yet" ; 
 : opc-A8 ( tay )  dup x-flag set? if mask8 else mask16 then  Y !  check-NZ.y ; 
-: opc-A9 ( lda.# ) \ TODO protect B in 8-bit mode!
-   drop  PC24 fetch.a  check-NZ.a  PC+fetch.a ; 
+: opc-A9 ( lda.# ) PC24 fetch.a  check-NZ.a  PC+fetch.a ; 
 : opc-AA ( tax )  dup x-flag set? if mask8 else mask16 then  X !  check-NZ.x ; 
 : opc-AB ( plb )   ." AB not coded yet" ; 
 : opc-AC ( ldy )  mode.abs  fetch.xy  check-NZ.a  Y !  PC+fetch.xy ;  \ TODO TESTME
-: opc-AD ( lda )  drop  mode.abs  fetch.a  check-NZ.a PC+fetch.a ; \ TODO TESTME
+: opc-AD ( lda )  mode.abs  fetch.a  check-NZ.a PC+fetch.a ; \ TODO TESTME
 : opc-AE ( ldx )  mode.abs  fetch.xy  check-NZ.a  X !  PC+fetch.xy ;  \ TODO TESTME
-: opc-AF ( lda.l ) drop mode.l  fetch.a  check-NZ.a PC+fetch.a ; \ TODO TESTME
+: opc-AF ( lda.l ) mode.l  fetch.a  check-NZ.a PC+fetch.a ; \ TODO TESTME
 : opc-B0 ( bcs )   ." B0 not coded yet" ; 
 : opc-B1 ( lda.diy )   ." B1 not coded yet" ; 
 : opc-B2 ( lda.di )   ." B2 not coded yet" ; 
@@ -666,7 +678,7 @@ cr .( Defining opcode routines ... )
 : opc-BC ( ldy.x )   ." BC not coded yet" ; 
 : opc-BD ( lda.x )   ." BD not coded yet" ; 
 : opc-BE ( ldx.y )   ." BE not coded yet" ; 
-: opc-BF ( lda.lx )  drop mode.lx  fetch.a check-NZ.a  PC+fetch.a ; \ TODO TESTME
+: opc-BF ( lda.lx )  mode.lx  fetch.a check-NZ.a  PC+fetch.a ; \ TODO TESTME
 : opc-C0 ( cpy.# )   ." C0 not coded yet" ; 
 : opc-C1 ( cmp.dxi )   ." C1 not coded yet" ; 
 : opc-C2 ( rep ) \ TODO crude testing version, complete this for all flags

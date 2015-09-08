@@ -89,8 +89,8 @@
    vectors w, \ ffea  NMI   (native mode) 
    0000    w, \ ffec  -- unused -- 
    vectors w, \ ffee  IRQ   (native mode) 
-   0000    w, \ fff1  -- unused -- 
-     00    b, \ fff3  -- unused -- 
+   0000    w, \ fff0  -- unused -- 
+   0000    w, \ fff2  -- unused -- 
    vectors w, \ fff4  COP   (emulation mode) 
    0000    w, \ fff6  -- unused -- 
    vectors w, \ fff8  ABORT (emulation mode) 

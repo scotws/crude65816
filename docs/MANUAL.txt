@@ -1,7 +1,7 @@
 Manual for A Crude 65816 Emulator 
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 09. Jan 2015
-This version: 13. July 2015
+This version: 07. Sep 2015
 
 
 THIS DOCUMENT IS CURRENTLY MERELY A COLLECTION OF NOTES. WHEN IN DOUBT, USE THE SOURCE CODE. 
@@ -10,7 +10,7 @@ THIS DOCUMENT IS CURRENTLY MERELY A COLLECTION OF NOTES. WHEN IN DOUBT, USE THE 
 
 CALLING THE PROGRAM
 
-By default, Gforth only reserves measly 256k for the dictionary, which is not   enough when you are going to simulate a 16M large memory space. We need to call Gforth with something like
+By default, Gforth only reserves measly 256k for the dictionary, which is not enough when you are going to simulate a 16M large memory space. We need to call Gforth with something like
 
         gforth -m 1G
 
@@ -38,16 +38,17 @@ Currently I/O chips are not emulated in any meaningful way. There are two locati
 
 USING THE PROGRAM
 
-In case you are new to Forth, a remember: Forth is not a programming language, but a system to create specialized languages. As such, with the Crude Emulator you have access to all Forth commands such as "dump", and in single-step mode can assign values to the register variables. 
+In case you are new to Forth, a remember: it is not a programming language, but a system to create specialized languages. As such, with the Crude Emulator you have access to all Forth commands such as "dump", and in single-step mode can assign values to the register variables. 
 
 The Crude Emulator current supports the following addition commands. Note that by Forth convention, a command that starts with a dot (".state") prints some information to the screen. 
 
+        .stack          - print the 65816 stack if in emulated mode
         .state          - print the CPU state (register content, etc)
         bye             - end emulation (normal Forth command) 
         fetch8          - fetch a byte from 24-bit address on Forth stack
         fetch16         - fetch a double byte from 24-bit address on stack
-        go-emulate      - switch the CPU to emulated (8-bit) mode
-        go-native       - switch the CPU to native (16-bit) mode
+        emulate         - switch the CPU to emulated (8-bit) mode
+        native          - switch the CPU to native (16-bit) mode
         reset-i         - Trigger the RESET interrupt 
         run             - run the emulator continuously
         step            - run one instruction in single-step mode

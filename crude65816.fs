@@ -61,9 +61,10 @@ variable PBR   \ Program Bank register ("K") (8 bit)
 : msb ( u -- u8 )  maskmsb  8 rshift ;
 : bank ( u -- u8 )  10 rshift  mask8 ; \ assumes HEX
 
-\ 16 bit addresses and endian conversion. Assumes MSB is TOS
-: 16>lsb/msb ( u16 -- lsb msb  )  dup lsb swap msb ; 
-: lsb/msb>16 ( lsb msb -- u16 )  8 lshift or ; 
+\ 16 bit addresses and endian conversion
+: 16>lsb/msb  ( u16 -- lsb msb )  dup lsb swap msb ; 
+: lsb/msb>16  ( lsb msb -- u16 )  8 lshift or ; 
+: msb/lsb>16  ( msb lsb -- u16 )  swap lsb/msb>16 ; 
 
 \ 24 bit to three bytes
 : 24>bank/msb/lsb  ( u24 -- bank msb lsb )  
@@ -137,7 +138,7 @@ defer fetch.a   defer fetch.xy
 \ Forth data stack in "normal" big endian format. Note we don't advance the PC
 \ here so we can use these routines with stuff like stack manipulations
 : fetch8  ( 65addr24 -- u8 )  memory +  c@ ; 
-: fetch16  ( 65addr24 -- u16 )  dup fetch8  swap 1+ fetch8  lsb/msb>16 ; 
+: fetch16  ( 65addr24 -- u16 )  dup fetch8  swap 1+ fetch8  msb/lsb>16 ; 
 : fetch24  ( 65addr24 -- u24 )  dup fetch8  over 1+ fetch8  
    rot 2 + fetch8  lsb/msb/bank>24 ; 
 

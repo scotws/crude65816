@@ -297,7 +297,7 @@ defer pull.xy
 
 \ Switch accumulator 8<->16 bit (p. 51 in Manual)
 \ Remember A is TOS 
-: a->16  ( -- )  
+: a:16  ( -- )  
    ['] fetch16.a is fetch.a  \ note special FETCH for A
    ['] store16 is store.a
    ['] PC+2 is PC+fetch.a
@@ -311,7 +311,7 @@ defer pull.xy
    ['] pull16 is pull.a
    m-flag clear ; 
 
-: a->8 ( -- )  
+: a:8 ( -- )  
    ['] fetch8.a is fetch.a   \ note special FETCH for A
    ['] store8 is store.a
    ['] PC+1 is PC+fetch.a
@@ -326,7 +326,7 @@ defer pull.xy
    m-flag set ;
 
 \ Switch X and Y 8<->16 bit (p. 51 in Manual) 
-: xy->16  ( -- )  
+: xy:16  ( -- )  
    ['] fetch16 is fetch.xy 
    ['] store16 is store.xy
    ['] PC+2 is PC+fetch.xy
@@ -339,7 +339,7 @@ defer pull.xy
    X @  00FF AND  X !   Y @  00FF AND  Y !  \ paranoid
    x-flag clear ; 
 
-: xy->8 ( -- )  
+: xy:8 ( -- )  
    ['] fetch8 is fetch.xy
    ['] store8 is store.xy
    ['] PC+1 is PC+fetch.xy
@@ -365,7 +365,7 @@ defer pull.xy
    ['] status-r8 is status-r 
    \ We explicitly change the status flags M and X eben though we don't see them
    \ because we use them internally to figure out the size of the registers
-   a->8   xy->8  
+   a:8   xy:8  
    S @  00FF AND  0100 OR  S ! \ stack pointer to 0100
    0 D !  \ direct page register initialized to zero 
    \ TODO clear b-flag ?
@@ -684,9 +684,9 @@ cr .( Defining opcode routines ... )
 : opc-C2 ( rep ) \ TODO crude testing version, complete this for all flags
    cr ." WARNING: REP is incomplete, works only on m and x flags" cr
    next1byte 
-   dup  20 = if a->16 else 
-   dup  10 = if xy->16  else 
-   dup  30 = if a->16 xy->16 then then then drop 
+   dup  20 = if a:16 else 
+   dup  10 = if xy:16  else 
+   dup  30 = if a:16 xy:16 then then then drop 
    PC+1 ; 
 : opc-C3 ( cmp.s )   ." C3 not coded yet" ; 
 : opc-C4 ( cpy.d )   ." C4 not coded yet" ; 
@@ -724,9 +724,9 @@ cr .( Defining opcode routines ... )
 : opc-E2 ( sep ) \ TODO crude testing version, complete this for all flags
    cr ." WARNING: SEP is incomplete, works only on m and x flags" cr
    next1byte 
-   dup  20 = if a->8 else 
-   dup  10 = if xy->8  else 
-   dup  30 = if a->8 xy->8 then then then drop 
+   dup  20 = if a:8 else 
+   dup  10 = if xy:8  else 
+   dup  30 = if a:8 xy:8 then then then drop 
    PC+1 ; 
 : opc-E3 ( sbc.s )   ." E3 not coded yet" ; 
 : opc-E4 ( cpx.d )   ." E4 not coded yet" ; 

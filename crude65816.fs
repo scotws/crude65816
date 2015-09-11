@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 09. Sep 2015
+\ This version: 11. Sep 2015 (911 Day)
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -132,6 +132,8 @@ cr .( Setting up I/O system ...)
 include io.fs
 
 \ Fetch from memory 
+\ Note that FETCH.A assumes we are going to replace A (the TOS) as in the LDA
+\ instructions. If we keep A (AND, ORA, EOR, etc), we need to include a DUP
 defer fetch.a   
 defer fetch.xy
 
@@ -307,6 +309,7 @@ defer pull.xy
    ['] check-Z.a16 is check-Z.a
    ['] and16 is and.a
    ['] eor16 is eor.a
+   ['] ora16 is ora.a
    ['] S++16 is S++.a
    ['] S--16 is S--.a
    ['] push16 is push.a 
@@ -321,6 +324,7 @@ defer pull.xy
    ['] check-Z.a8 is check-Z.a
    ['] and8 is and.a
    ['] eor8 is eor.a
+   ['] ora8 is ora.a
    ['] S++8 is S++.a
    ['] S--8 is S--.a
    ['] push8 is push.a 
@@ -486,14 +490,17 @@ cr .( Defining opcode routines ... )
 : opc-06 ( asl.d )  ." 06 not coded yet" ; 
 : opc-07 ( ora.dil )   ." 07 not coded yet" ; 
 : opc-08 ( php )   ." 08 not coded yet" ; 
-: opc-09 ( ora.# )  \ TODO needs DUP?
-   PC24 fetch.a  ora.a  check-NZ.a  PC+fetch.a ; \ TODO TESTME
+: opc-09 ( ora.# )  \ p. 370, DUP required because FETCH.A replaces A
+   dup PC24 fetch.a  ora.a  check-NZ.a  PC+fetch.a ; \ TODO TESTME
 : opc-0A ( asl.a )   ." 0A not coded yet" ; 
 : opc-0B ( phd )   ." 0B not coded yet" ; 
 : opc-0C ( tsb )   ." 0C not coded yet" ; 
-: opc-0D ( ora )  mode.abs  fetch.a  ora.a  check-NZ.a ;  \ TODO TESTME
+: opc-0D ( ora ) \ p. 370, DUP required because FETCH.A replaces A
+   dup mode.abs  fetch.a  ora.a  check-NZ.a ;
 : opc-0E ( asl )   ." 0E not coded yet" ; 
-: opc-0F ( ora.l )  mode.l  fetch.a  ora.a check-NZ.a ; \ TODO TESTME
+
+: opc-0F ( ora.l )  \ p. 370, DUP required because FETCH.A replaces A
+   dup mode.l  fetch.a  ora.a  check-NZ.a ;
 : opc-10 ( bpl )   ." 10 not coded yet" ; 
 : opc-11 ( ora.diy )   ." 11 not coded yet" ; 
 : opc-12 ( ora.di )   ." 12 not coded yet" ; 
@@ -525,9 +532,9 @@ cr .( Defining opcode routines ... )
 : opc-2A ( rol )   ." 2A not coded yet" ; 
 : opc-2B ( pld )   ." 2B not coded yet" ; 
 : opc-2C ( bit )   ." 2C not coded yet" ; 
-: opc-2D ( and )  mode.abs  fetch.a  and.a  check-NZ.a ;  \ TODO TESTME
+: opc-2D ( and )  dup mode.abs  fetch.a  and.a  check-NZ.a ;  \ TODO TESTME
 : opc-2E ( rol )   ." 2E not coded yet" ; 
-: opc-2F ( and.l )  mode.l  fetch.a  and.a  check-NZ.a ;  \ TODO TESTME
+: opc-2F ( and.l ) dup  mode.l  fetch.a  and.a  check-NZ.a ;  \ TODO TESTME
 : opc-30 ( bmi )   ." 30 not coded yet" ; 
 : opc-31 ( and.diy )   ." 31 not coded yet" ; 
 : opc-32 ( and.di )   ." 32 not coded yet" ; 
@@ -544,7 +551,7 @@ cr .( Defining opcode routines ... )
 : opc-3C ( bit.x )   ." 3C not coded yet" ; 
 : opc-3D ( and.x )   ." 3D not coded yet" ; 
 : opc-3E ( rol.x )   ." 3E not coded yet" ; 
-: opc-3F ( and.lx )  mode.lx  fetch.a  and.a  check-NZ.a ; \ TODO TESTME
+: opc-3F ( and.lx )  dup mode.lx  fetch.a  and.a  check-NZ.a ; \ TODO TESTME
 : opc-40 ( rti )   ." 40 not coded yet" ; 
 : opc-41 ( eor.dxi )   ." 41 not coded yet" ; 
 : opc-42 ( wdm ) ." WARNING: WDM executed."  PC+1 ; 
@@ -554,14 +561,14 @@ cr .( Defining opcode routines ... )
 : opc-46 ( lsr.d )   ." 46 not coded yet" ; 
 : opc-47 ( eor.dil )   ." 47 not coded yet" ; 
 : opc-48 ( pha )  dup push.a ; 
-: opc-49 ( eor.# )  \ TODO needs DUP?
-      PC24 fetch.a  eor.a  check-NZ.a  PC+fetch.a ; \ TODO TESTME
+: opc-49 ( eor.# )  
+      dup PC24 fetch.a  eor.a  check-NZ.a  PC+fetch.a ; \ TODO TESTME
 : opc-4A ( lsr.a )   ." 4A not coded yet" ; 
 : opc-4B ( phk )   ." 4B not coded yet" ; 
 : opc-4C ( jmp )  next2bytes  PC ! ;
-: opc-4D ( eor )  mode.abs  fetch.a  eor.a  check-NZ.a ;  \ TODO TESTME
+: opc-4D ( eor )  dup mode.abs  fetch.a  eor.a  check-NZ.a ;  \ TODO TESTME
 : opc-4E ( lsr )   ." 4E not coded yet" ; 
-: opc-4F ( eor.l )  mode.l  fetch.a  eor.a  check-NZ.a ; \ TODO TESTME
+: opc-4F ( eor.l )  dup  mode.l  fetch.a  eor.a  check-NZ.a ; \ TODO TESTME
 : opc-50 ( bvc )   ." 50 not coded yet" ; 
 : opc-51 ( eor.diy )   ." 51 not coded yet" ; 
 : opc-52 ( eor.di )   ." 52 not coded yet" ; 
@@ -577,7 +584,7 @@ cr .( Defining opcode routines ... )
 : opc-5C ( jmp.l )   opc-4C  next1byte PBR !  PC+3 ; \ TODO TESTME
 : opc-5D ( eor.dx )   ." 5D not coded yet" ; 
 : opc-5E ( lsr.x )   ." 5E not coded yet" ; 
-: opc-5F ( eor.lx ) mode.lx  fetch.a  eor.a  check-NZ.a ; \ TODO TESTME
+: opc-5F ( eor.lx )  dup mode.lx  fetch.a  eor.a  check-NZ.a ; \ TODO TESTME
 : opc-60 ( rts )   ." 60 not coded yet" ; 
 : opc-61 ( adc.dxi )   ." 61 not coded yet" ; 
 : opc-62 ( per )   ." 62 not coded yet" ; 
@@ -661,7 +668,7 @@ cr .( Defining opcode routines ... )
 : opc-9C ( stz )  0  mode.abs  store.a ; 
 : opc-9D ( sta.x )   ." 9D not coded yet" ; 
 : opc-9E ( stz.x )   ." 9E not coded yet" ; 
-: opc-9F ( sta.lx ) dup  mode.lx  store.a ; \ TODO TESTME
+: opc-9F ( sta.lx ) dup  mode.lx  store.a ;
 : opc-A0 ( ldy.# )  PC24 fetch.xy  Y !  check-NZ.y  PC+fetch.xy ;
 : opc-A1 ( lda.dxi )   ." A1 not coded yet" ; 
 : opc-A2 ( ldx.# )  PC24 fetch.xy  X !  check-NZ.x  PC+fetch.xy ;

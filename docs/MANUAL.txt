@@ -1,7 +1,7 @@
 Manual for A Crude 65816 Emulator 
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 09. Jan 2015
-This version: 09. Sep 2015
+This version: 11. Sep 2015
 
 
 THIS DOCUMENT IS CURRENTLY MERELY A COLLECTION OF NOTES. WHEN IN DOUBT, USE THE SOURCE CODE. 
@@ -46,10 +46,12 @@ The Crude Emulator current supports the following addition commands. Note that b
         .state          - print the CPU state (register content, etc)
         bye             - end emulation (normal Forth command) 
         fetch8          - fetch a byte from 24-bit address on Forth stack
-        fetch16         - fetch a double byte from 24-bit address on stack
+        fetch16         - fetch a double byte from 24-bit address on Forth stack
+        fetch24         - fetch three bytes from 24-bit address on Forth stack
         emulate         - switch the CPU to emulated (8-bit) mode
         native          - switch the CPU to native (16-bit) mode
         reset-i         - Trigger the RESET interrupt 
+        (FEHLT other interrupts)
         run             - run the emulator continuously
         step            - run one instruction in single-step mode
 
@@ -66,6 +68,17 @@ followed by a "run" or "step". The interrupt vectors can be accessed by hand thi
         reset-i
 
 Note that currently most interrupt routines are not functional. 
+
+
+OTHER USEFUL COMBINATIONS
+
+step .state
+
+step .state .stack
+
+EXECUTING A SINGLE INSTRUCTION
+
+FEHLT 
 
 
 

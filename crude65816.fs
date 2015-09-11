@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version pre-ALPHA  09. Sep 2015)  
+cr .( Version pre-ALPHA  11. Sep 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -54,11 +54,13 @@ variable PBR   \ Program Bank register ("K") (8 bit)
 : mask8 ( u -- u8 ) 0ff and ; 
 : mask16 ( u -- u16 ) 0ffff and ; 
 : mask24 ( u -- u24 ) 0ffffff and ; 
-: maskB ( u16 -- u16 ) 0ff00 and ; \ used for B register 
+: mask.B ( u16 -- u16 ) 0ff00 and ; \ used for B register 
+
+defer mask.xy
 
 \ return least, most significant byte of 16-bit number
 : lsb ( u -- u8 )  mask8 ;
-: msb ( u -- u8 )  maskB  8 rshift ;
+: msb ( u -- u8 )  mask.B  8 rshift ;
 : bank ( u -- u8 )  10 rshift  mask8 ; \ assumes HEX
 
 \ 16 bit addresses and endian conversion
@@ -84,7 +86,7 @@ variable PBR   \ Program Bank register ("K") (8 bit)
 
 \ Handle wrapping for 8-bit and 16-bit additions TODO TESTME 
 \ TODO See if we want to changed the c-flag directly
-: wrap8&c ( u -- u8 f )  dup mask8 swap  maskB  0= invert ; 
+: wrap8&c ( u -- u8 f )  dup mask8 swap  mask.B  0= invert ; 
 : wrap16&c ( u -- u16 f ) dup mask16 swap  0ff0000 and  0= invert ; 
 
 \ handle Program Counter
@@ -102,7 +104,7 @@ defer PC+fetch.a
 defer PC+fetch.xy
 
 \ Rescue B part of Accumulator. Used by AND for example
-: rescue.b ( C u -- B C u )  over maskB -rot ; 
+: rescue.b ( C u -- B C u )  over mask.B -rot ; 
 
 
 
@@ -228,7 +230,6 @@ c-flag @  01 and + ;
 defer check-N.a   defer check-N.x   defer check-N.y
 : check-N8 ( n -- )  80 and  if n-flag set  else  n-flag clear  then ;
 : check-N16 ( n -- )  8000 and  if n-flag set  else  n-flag clear  then ;
-
 : check-N.a8 ( n -- ) dup check-N8 ; 
 : check-N.a16 ( n -- ) dup check-N16 ; 
 : check-N.x8 ( n -- )  X @  check-N8 ; 
@@ -238,7 +239,6 @@ defer check-N.a   defer check-N.x   defer check-N.y
 
 defer check-Z.a
 : check-Z ( n -- )  if  z-flag clear  else  z-flag set  then ; 
-
 : check-Z.a8 ( -- ) dup 0ff AND  check-Z ;    \ ignore B
 : check-Z.a16 ( -- ) dup 0ffff AND  check-Z  ; 
 : check-Z.x ( -- )  X @  check-Z ;
@@ -296,6 +296,10 @@ defer pull.xy
 : pull16 ( -- n16 )  pull8 pull8 lsb/msb>16 ; 
 : pull24 ( -- n24 )  pull8 pull8 pull8 lsb/msb/bank>24 ; 
    
+\ We need a special pull8 for A in eight bit mode because we need to protect B
+: pull8.a  ( u16 -- u16 ) mask.B pull8 or ; 
+: pull16.a  ( u16 -- u16 ) drop pull16 ; 
+
 
 \ ---- REGISTER MODE SWITCHES ----
 
@@ -313,7 +317,7 @@ defer pull.xy
    ['] S++16 is S++.a
    ['] S--16 is S--.a
    ['] push16 is push.a 
-   ['] pull16 is pull.a
+   ['] pull16.a is pull.a  \ note special PULL for A
    m-flag clear ; 
 
 : a:8 ( -- )  
@@ -328,13 +332,14 @@ defer pull.xy
    ['] S++8 is S++.a
    ['] S--8 is S--.a
    ['] push8 is push.a 
-   ['] pull8 is pull.a
+   ['] pull8.a is pull.a      \ note special PULL8 for A
    m-flag set ;
 
 \ Switch X and Y 8<->16 bit (p. 51 in Manual) 
 : xy:16  ( -- )  
    ['] fetch16 is fetch.xy 
    ['] store16 is store.xy
+   ['] mask16 is mask.xy
    ['] PC+2 is PC+fetch.xy
    ['] check-N.x16 is check-N.x
    ['] check-N.y16 is check-N.y
@@ -348,6 +353,7 @@ defer pull.xy
 : xy:8 ( -- )  
    ['] fetch8 is fetch.xy
    ['] store8 is store.xy
+   ['] mask8 is mask.xy
    ['] PC+1 is PC+fetch.xy
    ['] check-N.x8 is check-N.x
    ['] check-N.y8 is check-N.y
@@ -490,10 +496,14 @@ cr .( Defining opcode routines ... )
 : opc-06 ( asl.d )  ." 06 not coded yet" ; 
 : opc-07 ( ora.dil )   ." 07 not coded yet" ; 
 : opc-08 ( php )   ." 08 not coded yet" ; 
+
 : opc-09 ( ora.# )  \ p. 370, DUP required because FETCH.A replaces A
    dup PC24 fetch.a  ora.a  check-NZ.a  PC+fetch.a ; \ TODO TESTME
+
 : opc-0A ( asl.a )   ." 0A not coded yet" ; 
-: opc-0B ( phd )   ." 0B not coded yet" ; 
+
+: opc-0B ( phd )  D @  mask16  push16 ;  \ p. 377
+
 : opc-0C ( tsb )   ." 0C not coded yet" ; 
 : opc-0D ( ora ) \ p. 370, DUP required because FETCH.A replaces A
    dup mode.abs  fetch.a  ora.a  check-NZ.a ;
@@ -512,8 +522,13 @@ cr .( Defining opcode routines ... )
 : opc-18 ( clc )  c-flag clear ; 
 : opc-19 ( ora.y )   ." 19 not coded yet" ; 
 : opc-1A ( inc.a )   ." 1A not coded yet" ; 
-: opc-1B ( tcs ) \ does not alter flags!
-   ." 1B not coded yet" ; 
+
+: opc-1B ( tcs )  \ p. 409, does not affect flags; compare TXS
+   dup e-flag set?  if \ emulation mode, hi byte paranoided to 01
+      mask8 0100 or  else
+      mask16 then      \ native mode always copies full C to S
+      S ! ;
+
 : opc-1C ( trb )   ." 1C not coded yet" ; 
 : opc-1D ( ora.x )   ." 1D not coded yet" ; 
 : opc-1E ( asl.x )   ." 1E not coded yet" ; 
@@ -527,10 +542,15 @@ cr .( Defining opcode routines ... )
 : opc-26 ( rol.d )   ." 26 not coded yet" ; 
 : opc-27 ( and.dil )   ." 27 not coded yet" ; 
 : opc-28 ( plp )   ." 28 not coded yet" ; 
+
 : opc-29 ( and.# )  \ p. 326  DUP required because FETCH.A replaces A
    dup PC24 fetch.a  and.a  check-NZ.a  PC+fetch.a ; 
+
 : opc-2A ( rol )   ." 2A not coded yet" ; 
-: opc-2B ( pld )   ." 2B not coded yet" ; 
+
+: opc-2B ( pld )  \ p. 384  affects N and Z, is always 16 bit
+   pull16  dup check-Z  dup check-N16  D ! ;
+
 : opc-2C ( bit )   ." 2C not coded yet" ; 
 : opc-2D ( and )  dup mode.abs  fetch.a  and.a  check-NZ.a ;  \ TODO TESTME
 : opc-2E ( rol )   ." 2E not coded yet" ; 
@@ -546,8 +566,10 @@ cr .( Defining opcode routines ... )
 : opc-38 ( sec )  c-flag set ;  
 : opc-39 ( and.y )   ." 39 not coded yet" ; 
 : opc-3A ( dec.a )   ." 3A not coded yet" ; 
+
 : opc-3B ( tsc )  \ p. 413, assumes N affected by 16th bit in all modes
    drop  S @  mask16  check-NZ.a ; 
+
 : opc-3C ( bit.x )   ." 3C not coded yet" ; 
 : opc-3D ( and.x )   ." 3D not coded yet" ; 
 : opc-3E ( rol.x )   ." 3E not coded yet" ; 
@@ -561,10 +583,14 @@ cr .( Defining opcode routines ... )
 : opc-46 ( lsr.d )   ." 46 not coded yet" ; 
 : opc-47 ( eor.dil )   ." 47 not coded yet" ; 
 : opc-48 ( pha )  dup push.a ; 
+
 : opc-49 ( eor.# )  
       dup PC24 fetch.a  eor.a  check-NZ.a  PC+fetch.a ; \ TODO TESTME
+
 : opc-4A ( lsr.a )   ." 4A not coded yet" ; 
-: opc-4B ( phk )   ." 4B not coded yet" ; 
+
+: opc-4B ( phk )  PBR @  mask8  push8 ; \ p. 379, mask8 is paranoid 
+
 : opc-4C ( jmp )  next2bytes  PC ! ;
 : opc-4D ( eor )  dup mode.abs  fetch.a  eor.a  check-NZ.a ;  \ TODO TESTME
 : opc-4E ( lsr )   ." 4E not coded yet" ; 
@@ -579,7 +605,7 @@ cr .( Defining opcode routines ... )
 : opc-57 ( eor.dy )   ." 57 not coded yet" ; 
 : opc-58 ( cli )  i-flag clear ;  
 : opc-59 ( eor.y )   ." 59 not coded yet" ; 
-: opc-5A ( phy )  Y @ push.xy ; \ TODO test me
+: opc-5A ( phy )  Y @ push.xy ; 
 : opc-5B ( tcd )  dup  mask16  D ! check-NZ.a ; \ mask16 is paranoid
 : opc-5C ( jmp.l )   opc-4C  next1byte PBR !  PC+3 ; \ TODO TESTME
 : opc-5D ( eor.dx )   ." 5D not coded yet" ; 
@@ -593,7 +619,10 @@ cr .( Defining opcode routines ... )
 : opc-65 ( adc.d )   ." 65 not coded yet" ; 
 : opc-66 ( ror.d )   ." 66 not coded yet" ; 
 : opc-67 ( adc.dil )   ." 67 not coded yet" ; 
-: opc-68 ( pla )   ." 68 not coded yet" ; 
+
+: opc-68 ( pla )  \ p. 380  Note this sets N and Z
+   pull.a check-NZ.a ; 
+
 : opc-69 ( adc.# )   ." 69 not coded yet" ; 
 : opc-6A ( ror.a )   ." 6A not coded yet" ; 
 : opc-6B ( rtl )   ." 6B not coded yet" ; 
@@ -611,8 +640,12 @@ cr .( Defining opcode routines ... )
 : opc-77 ( adc.dy )   ." 77 not coded yet" ; 
 : opc-78 ( sei ) i-flag set ; 
 : opc-79 ( adc.y )   ." 79 not coded yet" ; 
-: opc-7A ( ply )   ." 7A not coded yet" ; 
+
+: opc-7A ( ply )  \ p. 387  Note this sets N and Z
+   pull.xy  Y !  check-NZ.y ;
+
 : opc-7B ( tdc )  drop  D @  mask16  check-NZ.a ;  \ TODO TESTME, mask16 paranoid
+
 : opc-7C ( jmp.xi )   ." 7C not coded yet" ; 
 : opc-7D ( adc.x )   ." 7D not coded yet" ; 
 : opc-7E ( ror.x )   ." 7E not coded yet" ; 
@@ -625,16 +658,21 @@ cr .( Defining opcode routines ... )
 : opc-85 ( sta.d )   ." 85 not coded yet" ; 
 : opc-86 ( stx.d )   ." 86 not coded yet" ; 
 : opc-87 ( sta.dil )   ." 87 not coded yet" ; 
-: opc-88 ( dey )   ." 88 not coded yet" ; 
+
+: opc-88 ( dey )  \ p. 354 does not affect C flag
+   Y @  1- mask.xy  Y !  check-NZ.y ;
+
 : opc-89 ( bit.# )   ." 89 not coded yet" ; 
 
 : opc-8A ( txa )  \ p. 415  TODO test what happens to B register
    m-flag clear? if  
       drop  X @  else
-      maskB  X @  mask8 or  then 
+      mask.B  X @  mask8 or  then 
       check-NZ.a ; 
 
-: opc-8B ( phb )   ." 8B not coded yet" ; 
+: opc-8B ( phb )  DBR @  mask8  push8 ; \ p. 376, mask8 is paranoid 
+   
+
 : opc-8C ( sty )  Y @  mode.abs  store.xy ;
 : opc-8D ( sta )  dup  mode.abs  store.a ; 
 : opc-8E ( stx )  X @  mode.abs  store.xy ;
@@ -651,12 +689,12 @@ cr .( Defining opcode routines ... )
 : opc-98 ( tya )  \ p. 418  TODO test what happens to B register
    m-flag clear? if  
       drop  Y @  else
-      maskB  Y @  mask8 or  then 
+      mask.B  Y @  mask8 or  then 
       check-NZ.a ; 
 
 : opc-99 ( sta.y )   ." 99 not coded yet" ; 
 
-: opc-9A ( txs )  \ p. 416, note TXS does not alter flags 
+: opc-9A ( txs )  \ p. 416, does not alter flags; compare TCS 
    X @
    e-flag set? if    \ emulation mode, hi byte paranoided to 01
       mask8  0100 or else
@@ -680,7 +718,10 @@ cr .( Defining opcode routines ... )
 : opc-A8 ( tay )  dup x-flag set? if mask8 else mask16 then  Y !  check-NZ.y ; 
 : opc-A9 ( lda.# ) PC24 fetch.a  check-NZ.a  PC+fetch.a ; 
 : opc-AA ( tax )  dup x-flag set? if mask8 else mask16 then  X !  check-NZ.x ; 
-: opc-AB ( plb )   ." AB not coded yet" ; 
+
+: opc-AB ( plb )  \ p. 383  Note affects N and Z flags; always 8 bit in size
+   pull8  dup check-Z dup check-N8  DBR ! ;
+
 : opc-AC ( ldy )  mode.abs  fetch.xy  Y !  check-NZ.y ;
 : opc-AD ( lda )  mode.abs  fetch.a  check-NZ.a ;
 : opc-AE ( ldx )  mode.abs  fetch.xy  X !  check-NZ.x ;
@@ -704,6 +745,7 @@ cr .( Defining opcode routines ... )
 : opc-BF ( lda.lx )  mode.lx  fetch.a check-NZ.a ; \ TODO TESTME
 : opc-C0 ( cpy.# )   ." C0 not coded yet" ; 
 : opc-C1 ( cmp.dxi )   ." C1 not coded yet" ; 
+
 : opc-C2 ( rep ) \ TODO crude testing version, complete this for all flags
    cr ." WARNING: REP is incomplete, works only on m and x flags" cr
    next1byte 
@@ -711,14 +753,21 @@ cr .( Defining opcode routines ... )
    dup  10 = if xy:16  else 
    dup  30 = if a:16 xy:16 then then then drop 
    PC+1 ; 
+
 : opc-C3 ( cmp.s )   ." C3 not coded yet" ; 
 : opc-C4 ( cpy.d )   ." C4 not coded yet" ; 
 : opc-C5 ( cmp.d )   ." C5 not coded yet" ; 
 : opc-C6 ( dec.d )   ." C6 not coded yet" ; 
 : opc-C7 ( cmp.dil )   ." C7 not coded yet" ; 
-: opc-C8 ( iny )   ." C8 not coded yet" ; 
+
+: opc-C8 ( iny )  \ p. 359  Does not affect C flag
+   Y @  1+  mask.xy  Y !  check-NZ.y ;
+
 : opc-C9 ( cmp.# )   ." C9 not coded yet" ; 
-: opc-CA ( dex )   ." CA not coded yet" ; 
+
+: opc-CA ( dex )   \ p. 353, does not affect C flag
+   X @  1- mask.xy  X !  check-NZ.x ;
+
 : opc-CB ( wai ) \ TODO crude testing version, complete this for i-flag
    cr ." WARNING: WAI not fully implemented" 
    cr ." WAI instruction, halting processor" cr .state quit ; 
@@ -730,13 +779,14 @@ cr .( Defining opcode routines ... )
 : opc-D1 ( cmp.diy )   ." D1 not coded yet" ; 
 : opc-D2 ( cmp.di )   ." D2 not coded yet" ; 
 : opc-D3 ( cmp.siy )   ." D3 not coded yet" ; 
-: opc-D4 ( pei )   ." D4 not coded yet" ; 
+: opc-D4 ( phe.di )  \ p. 373
+   ." D4 not coded yet" ; 
 : opc-D5 ( cmp.dx )   ." D5 not coded yet" ; 
 : opc-D6 ( dec.dx )   ." D6 not coded yet" ; 
 : opc-D7 ( cmp.dy )   ." D7 not coded yet" ; 
 : opc-D8 ( cld )  d-flag clear ;  
 : opc-D9 ( cmp.y )   ." D9 not coded yet" ; 
-: opc-DA ( phx ) X @  push.xy ;  \ TODO TEST ME 
+: opc-DA ( phx ) X @  push.xy ;
 : opc-DB ( stp )  cr ." STP instruction, halting processor" cr .state quit ; 
 : opc-DC ( jmp.il )   ." DC not coded yet" ; 
 : opc-DD ( cmp.x )   ." DD not coded yet" ; 
@@ -744,6 +794,7 @@ cr .( Defining opcode routines ... )
 : opc-DF ( cmp.lx )   ." DF not coded yet" ; 
 : opc-E0 ( cpx.# )   ." E0 not coded yet" ; 
 : opc-E1 ( sbc.dxi )  ." E1 not coded yet" ; 
+
 : opc-E2 ( sep ) \ TODO crude testing version, complete this for all flags
    cr ." WARNING: SEP is incomplete, works only on m and x flags" cr
    next1byte 
@@ -751,15 +802,21 @@ cr .( Defining opcode routines ... )
    dup  10 = if xy:8  else 
    dup  30 = if a:8 xy:8 then then then drop 
    PC+1 ; 
+
 : opc-E3 ( sbc.s )   ." E3 not coded yet" ; 
 : opc-E4 ( cpx.d )   ." E4 not coded yet" ; 
 : opc-E5 ( sbc.d )   ." E5 not coded yet" ; 
 : opc-E6 ( inc.d )   ." E6 not coded yet" ; 
 : opc-E7 ( sbc.dil )   ." E7 not coded yet" ; 
-: opc-E8 ( inx )   ." E8 not coded yet" ; 
+
+: opc-E8 ( inx )  \ p. 358  Does not affect carry flag
+   X @  1+  mask.xy  X !  check-NZ.x ;
+
 : opc-E9 ( sbc.# )   ." E9 not coded yet" ; 
 : opc-EA ( nop ) ;
+
 : opc-EB ( xba ) dup msb swap  lsb 8 lshift  or  check-NZ.a ;
+
 : opc-EC ( cpx )   ." EC not coded yet" ; 
 : opc-ED ( sbc )   ." ED not coded yet" ; 
 : opc-EE ( inc )   ." EE not coded yet" ; 
@@ -768,13 +825,18 @@ cr .( Defining opcode routines ... )
 : opc-F1 ( sbc.diy )   ." F1 not coded yet" ; 
 : opc-F2 ( sbc.di )   ." F2 not coded yet" ; 
 : opc-F3 ( sbc.siy )   ." F3 not coded yet" ; 
-: opc-F4 ( pea )   ." F4 not coded yet" ; 
+
+: opc-F4 ( phe.# )  next2bytes push16 PC+2 ; \ p. 372, does not affect flags
+
 : opc-F5 ( sbc.dx )   ." F5 not coded yet" ; 
 : opc-F6 ( inc.dx )   ." F6 not coded yet" ; 
 : opc-F7 ( sbc.dily )   ." F7 not coded yet" ; 
 : opc-F8 ( sed )  d-flag set ; 
 : opc-F9 ( sbc.y )   ." F9 not coded yet" ; 
-: opc-FA ( plx )   ." FA not coded yet" ; 
+
+: opc-FA ( plx )  \ p. 385  Note this sets N and Z 
+   pull.xy  X !  check-NZ.x ; 
+
 : opc-FB ( xce )  e-flag @  c-flag @  swap  c-flag !  dup e-flag !
    if emulated else native then ; 
 : opc-FC ( jsr.xi )   ." FC not coded yet" ; 

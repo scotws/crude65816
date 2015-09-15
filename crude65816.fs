@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 13. Sep 2015 
+\ This version: 14. Sep 2015 
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -106,7 +106,6 @@ defer PC+fetch.xy
 : rescue.b ( C u -- B C u )  over mask.B -rot ; 
 
 
-
 \ ---- MEMORY ----
 
 \ All accesses to memory are always full 24 bit. Stack follows little-endian
@@ -149,7 +148,6 @@ defer fetch.xy
 
 \ We need special FETCH commands for A because we have the current value TOS and
 \ we need to protect B if A is 8 bits wide
-\ 
 : fetch8.a ( u 65addr24 -- u16 ) 
    memory + c@    ( u u8 ) 
    swap 0ff00 and  or ; 
@@ -569,9 +567,18 @@ cr .( Defining opcode routines ... )
 : opc-1D ( ora.x )   ." 1D not coded yet" ; 
 : opc-1E ( asl.x )   ." 1E not coded yet" ; 
 : opc-1F ( ora.lx )   ." 1F not coded yet" ; 
-: opc-20 ( jsr )   ." 20 not coded yet" ; 
+
+: opc-20 ( jsr )   \ p. 362
+   \ STEP already increases the PC by one, so we only need to add one byte 
+   \ because the address pushed is the last byte of the instruction
+   PC @  1+  push16   next2bytes PC ! ;
+
 : opc-21 ( and.dxi )   ." 21 not coded yet" ; 
-: opc-22 ( jsr.l )   ." 22 not coded yet" ; 
+
+: opc-22 ( jsr.l )  \ p. 361 TODO TEST ME 
+   PC24  2 +  push24  
+   next3bytes 24>lsb/msb/bank  PBR !  lsb/msb>16  PC ! ;
+
 : opc-23 ( and.s )   ." 23 not coded yet" ; 
 : opc-24 ( bit.d )   ." 24 not coded yet" ; 
 : opc-25 ( and.d )   ." 25 not coded yet" ; 
@@ -670,7 +677,8 @@ cr .( Defining opcode routines ... )
 
 : opc-5F ( eor.lx )  dup mode.lx  fetch.a  eor.a  check-NZ.a ; \ TODO TESTME
 
-: opc-60 ( rts )   ." 60 not coded yet" ; 
+: opc-60 ( rts )  pull16 1+  PC ! ;  \ p. 394 
+ 
 : opc-61 ( adc.dxi )   ." 61 not coded yet" ; 
 : opc-62 ( per )   ." 62 not coded yet" ; 
 : opc-63 ( adc.s )   ." 63 not coded yet" ; 
@@ -683,7 +691,9 @@ cr .( Defining opcode routines ... )
 
 : opc-69 ( adc.# )   ." 69 not coded yet" ; 
 : opc-6A ( ror.a )   ." 6A not coded yet" ; 
-: opc-6B ( rtl )   ." 6B not coded yet" ; 
+
+: opc-6B ( rts.l )   ." 6B not coded yet" ; 
+
 : opc-6C ( jmp.i )   ." 6C not coded yet" ; 
 : opc-6D ( adc )   ." 6D not coded yet" ; 
 : opc-6E ( ror )   ." 6E not coded yet" ; 

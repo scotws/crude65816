@@ -297,9 +297,20 @@ defer dec.mem
 : dec8.mem  ( 65addr -- )  dup fetch8 1- mask8  check-NZ.8  swap store8 ; 
 : dec16.mem  ( 65addr -- )  dup fetch16 1- mask16  check-NZ.16  swap store16 ; 
 
+\ --- BRANCHING --- 
+cr .( Setting up branching ...) 
+
+\ Extend the sign of an 8 bit number in a way we don't have to care about how
+\ large the cell size on the Forth machine is. Assumes that TRUE flag is some
+\ form of FFFF. MASK8 is paranoid. 
+: signextend ( u8 -- u )  mask8 dup  80 and 0<>  8 lshift  or ; 
+
+\ Note BRANCH is reserved by Forth
+: takebranch ( u8 -- u16 )  next1byte signextend 1+  PC +! ;
+   
 
 \ --- STACK STUFF ----
-cr .( Setting up Stack ...)
+cr .( Setting up stack ...)
 
 \ increase stack pointer 
 defer S++.a
@@ -734,7 +745,9 @@ cr .( Defining opcode routines ... )
 : opc-7D ( adc.x )   ." 7D not coded yet" ; 
 : opc-7E ( ror.x )   ." 7E not coded yet" ; 
 : opc-7F ( adc.lx )   ." 7F not coded yet" ; 
-: opc-80 ( bra )   ." 80 not coded yet" ; 
+
+: opc-80 ( bra )  takebranch ; \ p. 337
+
 : opc-81 ( sta.dxi )   ." 81 not coded yet" ;
 : opc-82 ( bra.l )   ." 82 not coded yet" ; 
 : opc-83 ( sta.s )   ." 83 not coded yet" ; 

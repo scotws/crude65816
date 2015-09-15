@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 14. Sep 2015 
+\ This version: 15. Sep 2015 
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version pre-ALPHA  13. Sep 2015)  
+cr .( Version pre-ALPHA  15. Sep 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -76,6 +76,9 @@ defer mask.xy
 : 24>lsb/msb/bank  ( u24 -- lsb msb bank ) 
    dup 16>lsb/msb      ( n lsb msb ) 
    rot bank ;          ( lsb msb bank) 
+
+\ Make 24 bit value the new 24 bit address
+: 24>PC24  ( 65addr -- )  24>lsb/msb/bank  PBR !  lsb/msb>16  PC ! ; 
 
 \ Convert various combinations to full 24 bit address. Assumes HEX 
 : mem16/bank>24  ( 65addr16 bank -- 65addr24 )  10 lshift or ; 
@@ -157,6 +160,7 @@ defer fetch.xy
 
 
 \ Store to memory 
+\ TODO include routines to check if this is a special address
 defer store.a   
 defer store.xy
 : store8 ( u8 65addr24 -- ) memory +  c! ;
@@ -439,7 +443,8 @@ cr .( Defining addressing modes ...)
 : mode.d ( -- 65addr24)  \ TODO TESTME handle page boundries
    next1byte  D @  +  00  mem16/bank>24  PC+1 ;
 
-\ direct page indirect. Note this uses the Data Bank Register (DBR)
+\ direct page indirect  
+\ Note this uses the Data Bank Register (DBR), not PBR
 : mode.di  ( -- 65addr24)  \ TODO TESTME handle page boundries 
    next1byte  D @  +  DBR  mem16/bank>24  fetch16  PC+1 ;
 
@@ -507,14 +512,16 @@ cr .( Defining addressing modes ...)
       else
          stackempty? if  
             ." Stack is empty (S is 01FF in emulated mode)" cr  else
-         0200  S @ 1+  ?do  i dup .  space  fetch8 .  cr  loop 
+         0200  S @ 1+  ?do  i dup .  space  fetch8 .mask8  cr  loop 
       then then ; 
    
 
 \ ---- OPCODE ROUTINES ----
 cr .( Defining opcode routines ... ) 
 
-: opc-00 ( brk )   ." BRK, halting CPU (ALPHA only)" .state quit ; \ testing only
+\ TODO change so we drop into single-step mode
+: opc-00 ( brk )   ." *** BRK encountered, halting CPU (ALPHA only) ***" 
+   .state quit ; 
 
 : opc-01 ( ora.dxi )   ." 01 not coded yet" ; 
 : opc-02 ( cop )   ." 02 not coded yet" ; 
@@ -575,9 +582,7 @@ cr .( Defining opcode routines ... )
 
 : opc-21 ( and.dxi )   ." 21 not coded yet" ; 
 
-: opc-22 ( jsr.l )  \ p. 361 TODO TEST ME 
-   PC24  2 +  push24  
-   next3bytes 24>lsb/msb/bank  PBR !  lsb/msb>16  PC ! ;
+: opc-22 ( jsr.l )  PC24  2 +  push24  next3bytes 24>PC24 ;  \ p. 361
 
 : opc-23 ( and.s )   ." 23 not coded yet" ; 
 : opc-24 ( bit.d )   ." 24 not coded yet" ; 
@@ -668,9 +673,9 @@ cr .( Defining opcode routines ... )
 
 : opc-5A ( phy )  Y @ push.xy ; 
 
-: opc-5B ( tcd )  dup  mask16  D ! check-NZ.a ; \ mask16 is paranoid
+: opc-5B ( tcd )  dup  mask16  D ! check-NZ.a ;  \ mask16 is paranoid
 
-: opc-5C ( jmp.l )  next2bytes  PC+2  next1byte PBR !  PC !  ;
+: opc-5C ( jmp.l )  next3bytes 24>PC24 ;  \ p. 360
 
 : opc-5D ( eor.dx )   ." 5D not coded yet" ; 
 : opc-5E ( lsr.x )   ." 5E not coded yet" ; 
@@ -680,7 +685,7 @@ cr .( Defining opcode routines ... )
 : opc-60 ( rts )  pull16 1+  PC ! ;  \ p. 394 
  
 : opc-61 ( adc.dxi )   ." 61 not coded yet" ; 
-: opc-62 ( per )   ." 62 not coded yet" ; 
+: opc-62 ( phe.r )   ." 62 not coded yet" ; 
 : opc-63 ( adc.s )   ." 63 not coded yet" ; 
 : opc-64 ( stz.d )   ." 64 not coded yet" ; 
 : opc-65 ( adc.d )   ." 65 not coded yet" ; 
@@ -692,7 +697,7 @@ cr .( Defining opcode routines ... )
 : opc-69 ( adc.# )   ." 69 not coded yet" ; 
 : opc-6A ( ror.a )   ." 6A not coded yet" ; 
 
-: opc-6B ( rts.l )   ." 6B not coded yet" ; 
+: opc-6B ( rts.l )  pull24 1+  24>PC24 ;  \ p. 393
 
 : opc-6C ( jmp.i )   ." 6C not coded yet" ; 
 : opc-6D ( adc )   ." 6D not coded yet" ; 
@@ -722,7 +727,7 @@ cr .( Defining opcode routines ... )
 : opc-7F ( adc.lx )   ." 7F not coded yet" ; 
 : opc-80 ( bra )   ." 80 not coded yet" ; 
 : opc-81 ( sta.dxi )   ." 81 not coded yet" ;
-: opc-82 ( brl )   ." 82 not coded yet" ; 
+: opc-82 ( bra.l )   ." 82 not coded yet" ; 
 : opc-83 ( sta.s )   ." 83 not coded yet" ; 
 : opc-84 ( sty.d )   ." 84 not coded yet" ; 
 : opc-85 ( sta.d )   ." 85 not coded yet" ; 
@@ -864,7 +869,7 @@ cr .( Defining opcode routines ... )
 
 : opc-CB ( wai ) \ TODO crude testing version, complete this for i-flag
    cr cr ." WARNING: WAI not fully implemented" 
-   cr ." WAI instruction, halting processor" cr .state quit ; 
+   cr ." *** WAI instruction, halting processor ***" cr .state quit ; 
 
 : opc-CC ( cpy )   ." CC not coded yet" ; 
 : opc-CD ( cmp )   ." CD not coded yet" ; 

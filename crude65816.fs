@@ -144,26 +144,35 @@ defer fetch.xy
 \ Double bytes assume  little-endian storage in memory but returns it to the
 \ Forth data stack in "normal" big endian format. Note we don't advance the PC
 \ here so we can use these routines with stuff like stack manipulations
-: fetch8  ( 65addr24 -- u8 )  memory +  c@ ; 
+
+\ FETCH8 includes the check for special addresses (I/O chips, etc) so all other
+\ store words should be based on it
+: fetch8  ( 65addr24 -- u8 )  
+   special-fetch?  dup 0= if     ( 65addr24 0|xt)
+      drop  memory +  c@  else
+      nip execute  then ; 
 : fetch16  ( 65addr24 -- u16 )  dup fetch8  swap 1+ fetch8  lsb/msb>16 ; 
-: fetch24  ( 65addr24 -- u24 )  dup fetch8  over 1+ fetch8  
-   rot 2 + fetch8  lsb/msb/bank>24 ; 
+: fetch24  ( 65addr24 -- u24 )  
+   dup fetch8  over 1+ fetch8  
+   rot 2 + fetch8  
+   lsb/msb/bank>24 ; 
 
 \ We need special FETCH commands for A because we have the current value TOS and
 \ we need to protect B if A is 8 bits wide
-: fetch8.a ( u 65addr24 -- u16 ) 
-   memory + c@    ( u u8 ) 
-   swap 0ff00 and  or ; 
-
-: fetch16.a  ( u 65addr24 -- u16 ) 
-   nip fetch16 ; 
-
+: fetch8.a ( u 65addr24 -- u16 )  fetch8  swap  0ff00 and  or ; 
+: fetch16.a  ( u 65addr24 -- u16 )  nip fetch16 ; 
 
 \ Store to memory 
-\ TODO include routines to check if this is a special address
 defer store.a   
 defer store.xy
-: store8 ( u8 65addr24 -- ) memory +  c! ;
+
+\ STORE8 includes the check for special addresses (I/O chips, etc) so all other
+\ store words should be based on it
+: store8 ( u8 65addr24 -- ) 
+   special-store?  dup 0= if     ( u8 65addr24 0|xt)
+      drop  memory +  c!  else
+      nip execute  then ; 
+
 : store16 ( u16 65addr24 -- ) \ store LSB first
    2dup swap lsb swap store8  swap msb swap 1+ store8 ; 
 : store24 ( u24 65addr24 -- ) 
@@ -520,7 +529,7 @@ cr .( Defining addressing modes ...)
 cr .( Defining opcode routines ... ) 
 
 \ TODO change so we drop into single-step mode
-: opc-00 ( brk )   ." *** BRK encountered, halting CPU (ALPHA only) ***" 
+: opc-00 ( brk )   cr ." *** BRK encountered, halting CPU (ALPHA only) ***" 
    .state quit ; 
 
 : opc-01 ( ora.dxi )   ." 01 not coded yet" ; 

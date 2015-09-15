@@ -18,13 +18,15 @@
 \ instructions have to go through.
 create store-addrs
    here 0 ,                
-   putchr ,  ' printchar , \ ## add new routines below this line ## 
+   \ ### add new routines here ###
+   putchr ,  ' printchar ,
    here  swap !   \ save address of last entry in table in its first entry
 
 \ The equivalent for special read addresses
-create read-addrs
+create fetch-addrs
    here 0 , 
-   getchr ,  ' readchar ,  \ ### add new routines below this line
+   \ ### add new routines here ###
+   getchr ,  ' readchar ,
    here  swap !   \ save address of last entry in table in its first entry
 
 
@@ -32,7 +34,8 @@ create read-addrs
 \ the address of the table, either STORE-ADDRS or READ-ADDRS. Because Forth
 \ doesn't have a BREAK statement for indefinite loops, we count the number of
 \ elements and put the count in the first address of the array. See
-\ http://forum.6502.org/viewtopic.php?f=9&t=3391 for a discussion of this code
+\ http://forum.6502.org/viewtopic.php?f=9&t=3391 for a discussion of this code.
+\ Note this routine does not consume the address provided
 : special-io? ( 65addr table -- 65addr 0|xt)
    false swap      ( 65addr 0 table )         \ default return value
    dup @           ( 65addr 0 addr-s addr-e ) \ start and end of table
@@ -42,6 +45,6 @@ create read-addrs
       = if  drop i cell+ @  leave then 
    [ cell 2* ] literal +loop ; 
 
-: special-store? ( 65addr - 0|xt)  store-addrs special-io? ; 
-: special-read? ( 65addr - 0|xt)  read-addrs special-io? ; 
+: special-store? ( 65addr - 65addr 0|xt)  store-addrs special-io? ; 
+: special-fetch? ( 65addr - 65addr 0|xt)  fetch-addrs special-io? ; 
    

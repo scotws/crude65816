@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 15. Sep 2015 
+\ This version: 16. Sep 2015 
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version pre-ALPHA  15. Sep 2015)  
+cr .( Version pre-ALPHA  16. Sep 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -297,16 +297,20 @@ defer dec.mem
 : dec8.mem  ( 65addr -- )  dup fetch8 1- mask8  check-NZ.8  swap store8 ; 
 : dec16.mem  ( 65addr -- )  dup fetch16 1- mask16  check-NZ.16  swap store16 ; 
 
+
 \ --- BRANCHING --- 
 cr .( Setting up branching ...) 
 
-\ Extend the sign of an 8 bit number in a way we don't have to care about how
-\ large the cell size on the Forth machine is. Assumes that TRUE flag is some
-\ form of FFFF. MASK8 is paranoid. 
+\ Extend the sign of an 8-bit/16-bit number in a way we don't have to care about
+\ how large the cell size on the Forth machine is. Assumes that TRUE flag is
+\ some form of FFFF. MASK8/MASK16 is paranoid. 
 : signextend ( u8 -- u )  mask8 dup  80 and 0<>  8 lshift  or ; 
+: signextend.l ( u16 -- u ) mask16 dup  8000 and 0<> 10 lshift or ;
 
 \ Note BRANCH is reserved by Forth
 : takebranch ( u8 -- u16 )  next1byte signextend 1+  PC +! ;
+
+: branch-if-true ( f -- )  if takebranch else PC+1 then ; 
    
 
 \ --- STACK STUFF ----
@@ -569,7 +573,8 @@ cr .( Defining opcode routines ... )
 : opc-0F ( ora.l )  \ p. 370, DUP required because FETCH.A replaces A
    dup mode.l  fetch.a  ora.a  check-NZ.a ;
 
-: opc-10 ( bpl )   ." 10 not coded yet" ; 
+: opc-10 ( bpl )  n-flag clear? branch-if-true ; 
+
 : opc-11 ( ora.diy )   ." 11 not coded yet" ; 
 : opc-12 ( ora.di )   ." 12 not coded yet" ; 
 : opc-13 ( ora.siy )   ." 13 not coded yet" ; 
@@ -627,7 +632,8 @@ cr .( Defining opcode routines ... )
 
 : opc-2F ( and.l ) dup  mode.l  fetch.a  and.a  check-NZ.a ;  \ TODO TESTME
 
-: opc-30 ( bmi )   ." 30 not coded yet" ; 
+: opc-30 ( bmi )  n-flag set? branch-if-true ; 
+
 : opc-31 ( and.diy )   ." 31 not coded yet" ; 
 : opc-32 ( and.di )   ." 32 not coded yet" ; 
 : opc-33 ( and.siy )   ." 33 not coded yet" ; 
@@ -678,7 +684,8 @@ cr .( Defining opcode routines ... )
 
 : opc-4F ( eor.l )  dup  mode.l  fetch.a  eor.a  check-NZ.a ; \ TODO TESTME
 
-: opc-50 ( bvc )   ." 50 not coded yet" ; 
+: opc-50 ( bvc )   v-flag clear? branch-if-true ; 
+
 : opc-51 ( eor.diy )   ." 51 not coded yet" ; 
 : opc-52 ( eor.di )   ." 52 not coded yet" ; 
 : opc-53 ( eor.siy )   ." 53 not coded yet" ; 
@@ -723,7 +730,9 @@ cr .( Defining opcode routines ... )
 : opc-6D ( adc )   ." 6D not coded yet" ; 
 : opc-6E ( ror )   ." 6E not coded yet" ; 
 : opc-6F ( adc.l )   ." 6F not coded yet" ; 
-: opc-70 ( bvs )   ." 70 not coded yet" ; 
+
+: opc-70 ( bvs )  v-flag set? branch-if-true ;  
+
 : opc-71 ( adc.diy )   ." 71 not coded yet" ; 
 : opc-72 ( adc.di )   ." 72 not coded yet" ; 
 : opc-73 ( adc.siy )   ." 73 not coded yet" ; 
@@ -736,8 +745,7 @@ cr .( Defining opcode routines ... )
 
 : opc-79 ( adc.y )   ." 79 not coded yet" ; 
 
-: opc-7A ( ply )  \ p. 387  Note this sets N and Z
-   pull.xy  Y !  check-NZ.y ;
+: opc-7A ( ply )  pull.xy  Y !  check-NZ.y ;
 
 : opc-7B ( tdc )  drop  D @  mask16  check-NZ.a ;  \ TODO TESTME, mask16 paranoid
 
@@ -746,10 +754,12 @@ cr .( Defining opcode routines ... )
 : opc-7E ( ror.x )   ." 7E not coded yet" ; 
 : opc-7F ( adc.lx )   ." 7F not coded yet" ; 
 
-: opc-80 ( bra )  takebranch ; \ p. 337
+: opc-80 ( bra )  takebranch ;
 
 : opc-81 ( sta.dxi )   ." 81 not coded yet" ;
-: opc-82 ( bra.l )   ." 82 not coded yet" ; 
+
+: opc-82 ( bra.l )  next2bytes signextend.l  2 +  PC +! ; 
+
 : opc-83 ( sta.s )   ." 83 not coded yet" ; 
 : opc-84 ( sty.d )   ." 84 not coded yet" ; 
 : opc-85 ( sta.d )   ." 85 not coded yet" ; 
@@ -777,7 +787,8 @@ cr .( Defining opcode routines ... )
 
 : opc-8F ( sta.l )  dup  mode.l  store.a ; 
 
-: opc-90 ( bcc )   ." 90 not coded yet" ; 
+: opc-90 ( bcc )  c-flag clear? branch-if-true ; 
+
 : opc-91 ( sta.diy )   ." 91 not coded yet" ; 
 : opc-92 ( sta.di )   ." 92 not coded yet" ; 
 : opc-93 ( sta.siy )   ." 93 not coded yet" ; 
@@ -786,7 +797,7 @@ cr .( Defining opcode routines ... )
 : opc-96 ( stx.dy )   ." 96 not coded yet" ; 
 : opc-97 ( sta.dily )   ." 97 not coded yet" ; 
 
-: opc-98 ( tya )  \ p. 418  TODO test what happens to B register
+: opc-98 ( tya )  \ TODO test what happens to B register
    m-flag clear? if  
       drop  Y @  else
       mask.B  Y @  mask8 or  then 
@@ -840,7 +851,8 @@ cr .( Defining opcode routines ... )
 
 : opc-AF ( lda.l ) mode.l  fetch.a  check-NZ.a PC+fetch.a ; 
 
-: opc-B0 ( bcs )   ." B0 not coded yet" ; 
+: opc-B0 ( bcs )  c-flag set? branch-if-true ;  
+
 : opc-B1 ( lda.diy )   ." B1 not coded yet" ; 
 : opc-B2 ( lda.di )   ." B2 not coded yet" ; 
 : opc-B3 ( lda.siy )   ." B3 not coded yet" ; 
@@ -890,8 +902,8 @@ cr .( Defining opcode routines ... )
    X @  1- mask.xy  X !  check-NZ.x ;
 
 : opc-CB ( wai ) \ TODO crude testing version, complete this for i-flag
-   cr cr ." WARNING: WAI not fully implemented" 
-   cr ." *** WAI instruction, halting processor ***" cr .state quit ; 
+   cr cr ." *** WAI instruction, halting processor ***" .state quit 
+   cr ." WARNING: WAI not fully implemented" ; 
 
 : opc-CC ( cpy )   ." CC not coded yet" ; 
 : opc-CD ( cmp )   ." CD not coded yet" ; 
@@ -899,7 +911,9 @@ cr .( Defining opcode routines ... )
 : opc-CE ( dec )   mode.abs dec.mem ;  \ p. 350
 
 : opc-CF ( cmp.l )   ." CF not coded yet" ; 
-: opc-D0 ( bne )   ." D0 not coded yet" ; 
+
+: opc-D0 ( bne )  z-flag clear? branch-if-true ; 
+
 : opc-D1 ( cmp.diy )   ." D1 not coded yet" ; 
 : opc-D2 ( cmp.di )   ." D2 not coded yet" ; 
 : opc-D3 ( cmp.siy )   ." D3 not coded yet" ; 
@@ -917,7 +931,8 @@ cr .( Defining opcode routines ... )
 
 : opc-DA ( phx ) X @  push.xy ;
 
-: opc-DB ( stp )  cr ." STP instruction, halting processor" cr .state quit ; 
+: opc-DB ( stp )  cr cr ." *** STP instruction, halting processor" cr
+   .state quit ; 
 
 : opc-DC ( jmp.il )   ." DC not coded yet" ; 
 : opc-DD ( cmp.x )   ." DD not coded yet" ; 
@@ -954,7 +969,9 @@ cr .( Defining opcode routines ... )
 : opc-EE ( inc )   mode.abs inc.mem ; \ p. 357  does not affect carry or decimal flag ; 
 
 : opc-EF ( sbc.l )   ." EF not coded yet" ; 
-: opc-F0 ( beq )   ." F0 not coded yet" ; 
+
+: opc-F0 ( beq )  z-flag set? branch-if-true ; 
+
 : opc-F1 ( sbc.diy )   ." F1 not coded yet" ; 
 : opc-F2 ( sbc.di )   ." F2 not coded yet" ; 
 : opc-F3 ( sbc.siy )   ." F3 not coded yet" ; 

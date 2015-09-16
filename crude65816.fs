@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 16. Sep 2015 
+\ This version: 17. Sep 2015 
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version pre-ALPHA  16. Sep 2015)  
+cr .( Version pre-ALPHA  17. Sep 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -82,7 +82,8 @@ defer mask.xy
 
 \ Convert various combinations to full 24 bit address. Assumes HEX 
 : mem16/bank>24  ( 65addr16 bank -- 65addr24 )  10 lshift or ; 
-: mem16>24  ( 65addr16 -- 65addr24 )  PBR @  mem16/bank>24 ; 
+: mem16/PBR>24  ( 65addr16 -- 65addr24 )  PBR @  mem16/bank>24 ; 
+: mem16/DBR>24  ( 65addr16 -- 65addr24 )  DBR @  mem16/bank>24 ; 
 : lsb/msb/bank>24  ( lsb msb bank -- 65addr24 )  
    -rot lsb/msb>16 swap mem16/bank>24 ; 
 
@@ -445,47 +446,50 @@ defer pull.xy
 cr .( Defining addressing modes ...) 
 
 \ Note that the mnemonics for Absolute Mode have no suffix, but we use
-\ "mode.abs" for clarity. Note that not all modes are listed here, as some are
+\ MODE.ABS for clarity. Note that not all modes are listed here, as some are
 \ easier to code by hand. Note that modes advance the PC so we don't have to
 \ include that in the operand code. Note that register manipulation must come
-\ before the mode word (eg "Y @  MODE.ABS"), not behind it 
+\ before the mode word (eg "Y @  MODE.ABS.DBR"), not behind it 
 
 \ Absolute 
-: mode.abs ( -- 65addr24 )  next2bytes mem16>24 PC+2 ;
+\ We need two different versions, one for instructions that affect data and take
+\ the DBR, and one for instructions that affect programs and take the PBR
+: mode.abs.PBR ( -- 65addr24 )  next2bytes mem16/PBR>24 PC+2 ;
+: mode.abs.DBR ( -- 65addr24 )  next2bytes mem16/DBR>24 PC+2 ;
 
 \ Absolute Indirect 
-\ TODO missing PC advance?
-\ TODO TESTME
-: mode.i  ( -- 65addr24)  mode.abs  fetch16  mem16>24 ;
+: mode.i  ( -- 65addr24)  mode.abs.PBR  fetch16  mem16/PBR>24 ;
 
 \ Absolute Long 
-: mode.l  ( -- 65addr24)  next3bytes  PC+3 ;
+: mode.l  ( -- 65addr24)  next3bytes PC+3 ;
 
 \ Absolute X/Y Indexed 
-\ TODO missing PC advance? 
 \ TODO TESTME  
-\ TODO handle overflow
-: mode.x  ( -- 65addr24 )  mode.abs  X @  + ;
-: mode.y  ( -- 65addr24 )  mode.abs  Y @  + ;
+\ TODO handle wrapping
+\ TODO Figure out if we want MODE.ABS.PBR or .DBR
+\ : mode.x  ( -- 65addr24 )  mode.abs  X @  + ;
+\ : mode.y  ( -- 65addr24 )  mode.abs  Y @  + ;
 
 \ Absolute Long X Indexed 
-\ TODO missing PC advance?
-\ TODO handle overflow 
-\ TODO TESTME 
+\ This assumes that X will be the correct width (8 or 16 bit) 
+\ TODO handle wrapping
 : mode.lx ( -- 65addr24)  mode.l  X @  + ; 
 
 \ Direct Page (pp. 94, 155, 278) 
-\ TODO handle page boundries
+\ TODO handle page boundries / wrapping
 : mode.d ( -- 65addr24)  next1byte  D @  +   00  mem16/bank>24  PC+1 ;
 
 \ Direct Page Indirect  
-\ Note this uses the Data Bank Register (DBR), not PBR
+\ Note this uses the Data Bank Register DBR, not PBR
 \ TODO TESTME 
-\ TODO handle page boundries 
-: mode.di  ( -- 65addr24)  
-   next1byte  D @  +  DBR  mem16/bank>24  fetch16  PC+1 ;
+\ TODO handle page boundries / wrapping
+\ : mode.di  ( -- 65addr24)  
+\   next1byte  D @  +  DBR  mem16/bank>24  fetch16  PC+1 ;
+
+
 
 \ ---- OUTPUT FUNCTIONS ----
+cr .( Creating output functions ...) 
 
 \ Print byte as bits, does not add space, returns as HEX
 : .8bits ( u -- ) 
@@ -575,7 +579,7 @@ cr .( Defining opcode routines ... )
 : opc-0C ( tsb )   ." 0C not coded yet" ; 
 
 : opc-0D ( ora )  \ DUP required because FETCH.A replaces A
-   dup mode.abs  fetch.a  ora.a  check-NZ.a ;
+   dup mode.abs.DBR  fetch.a  ora.a  check-NZ.a ;
 
 : opc-0E ( asl )   ." 0E not coded yet" ; 
 
@@ -596,7 +600,7 @@ cr .( Defining opcode routines ... )
 
 : opc-19 ( ora.y )   ." 19 not coded yet" ; 
 
-: opc-1A ( inc.a )   inc.accu ;  \ p. 355
+: opc-1A ( inc.a )   inc.accu ;
 
 : opc-1B ( tcs )  \ Does not affect flags; compare TXS
    dup e-flag set?  if \ emulation mode, hi byte paranoided to 01
@@ -607,7 +611,7 @@ cr .( Defining opcode routines ... )
 : opc-1C ( trb )   ." 1C not coded yet" ; 
 : opc-1D ( ora.x )   ." 1D not coded yet" ; 
 : opc-1E ( asl.x )   ." 1E not coded yet" ; 
-: opc-1F ( ora.lx )   ." 1F not coded yet" ; 
+: opc-1F ( ora.lx )  dup mode.lx  fetch.a  ora.a  check-NZ.a ; \ TODO TEST ME 
 
 \ STEP already increases the PC by one, so we only need to add one byte because
 \ the address pushed is the last byte of the instruction
@@ -637,7 +641,7 @@ cr .( Defining opcode routines ... )
 
 : opc-2C ( bit )   ." 2C not coded yet" ; 
 
-: opc-2D ( and )  dup mode.abs  fetch.a  and.a  check-NZ.a ;  \ TODO TESTME
+: opc-2D ( and )  dup mode.abs.DBR  fetch.a  and.a  check-NZ.a ;  \ TODO TESTME
 
 : opc-2E ( rol )   ." 2E not coded yet" ; 
 
@@ -657,7 +661,7 @@ cr .( Defining opcode routines ... )
 
 : opc-39 ( and.y )   ." 39 not coded yet" ; 
 
-: opc-3A ( dec.a )  dec.accu ;  \ p. 350
+: opc-3A ( dec.a )  dec.accu ;
 
 \ Assumes N affected by 16th bit in all modes
 : opc-3B ( tsc )  drop  S @  mask16  check-NZ.a ; 
@@ -666,7 +670,7 @@ cr .( Defining opcode routines ... )
 : opc-3D ( and.x )   ." 3D not coded yet" ; 
 : opc-3E ( rol.x )   ." 3E not coded yet" ; 
 
-: opc-3F ( and.lx )  dup mode.lx  fetch.a  and.a  check-NZ.a ; \ TODO TESTME
+: opc-3F ( and.lx )  dup mode.lx  fetch.a  and.a  check-NZ.a ; \ TODO TEST ME 
 
 : opc-40 ( rti )   ." 40 not coded yet" ; 
 : opc-41 ( eor.dxi )   ." 41 not coded yet" ; 
@@ -685,9 +689,9 @@ cr .( Defining opcode routines ... )
 
 : opc-4A ( lsr.a )   ." 4A not coded yet" ; 
 
-: opc-4B ( phk )  PBR @  mask8  push8 ; \ p. 379, mask8 is paranoid 
+: opc-4B ( phk )  PBR @  mask8  push8 ; \ Mask8 is paranoid 
 : opc-4C ( jmp )  next2bytes  PC ! ;
-: opc-4D ( eor )  dup mode.abs  fetch.a  eor.a  check-NZ.a ;  \ TODO TESTME
+: opc-4D ( eor )  dup mode.abs.DBR  fetch.a  eor.a  check-NZ.a ;  \ TODO TESTME
 
 : opc-4E ( lsr )   ." 4E not coded yet" ; 
 
@@ -713,8 +717,9 @@ cr .( Defining opcode routines ... )
 : opc-5D ( eor.dx )   ." 5D not coded yet" ; 
 : opc-5E ( lsr.x )   ." 5E not coded yet" ; 
 
-: opc-5F ( eor.lx )  dup mode.lx  fetch.a  eor.a  check-NZ.a ; \ TODO TESTME
-: opc-60 ( rts )  pull16 1+  PC ! ;  \ p. 394 
+: opc-5F ( eor.lx )  dup mode.lx  fetch.a  eor.a  check-NZ.a ; \ TODO TEST ME
+
+: opc-60 ( rts )  pull16 1+  PC ! ;
  
 : opc-61 ( adc.dxi )   ." 61 not coded yet" ; 
 : opc-62 ( phe.r )   ." 62 not coded yet" ; 
@@ -733,7 +738,8 @@ cr .( Defining opcode routines ... )
 
 : opc-6B ( rts.l )  pull24 1+  24>PC24 ; 
 
-: opc-6C ( jmp.i )   ." 6C not coded yet" ; 
+: opc-6C ( jmp.i )  mode.i  PC ! ; 
+
 : opc-6D ( adc )   ." 6D not coded yet" ; 
 : opc-6E ( ror )   ." 6E not coded yet" ; 
 : opc-6F ( adc.l )   ." 6F not coded yet" ; 
@@ -785,9 +791,9 @@ cr .( Defining opcode routines ... )
       check-NZ.a ; 
 
 : opc-8B ( phb )  DBR @  mask8  push8 ; \ mask8 is paranoid 
-: opc-8C ( sty )  Y @  mode.abs store.xy ;
-: opc-8D ( sta )  dup  mode.abs  store.a ; 
-: opc-8E ( stx )  X @  mode.abs store.xy ;
+: opc-8C ( sty )  Y @  mode.abs.DBR store.xy ;
+: opc-8D ( sta )  dup  mode.abs.DBR  store.a ; 
+: opc-8E ( stx )  X @  mode.abs.DBR store.xy ;
 : opc-8F ( sta.l )  dup  mode.l  store.a ; 
 : opc-90 ( bcc )  c-flag clear? branch-if-true ; 
 
@@ -817,12 +823,12 @@ cr .( Defining opcode routines ... )
    S ! ; 
             
 : opc-9B ( txy )  X @  Y !  check-NZ.y ;
-: opc-9C ( stz )  0  mode.abs store.a ; 
+: opc-9C ( stz )  0  mode.abs.DBR store.a ; 
 
 : opc-9D ( sta.x )   ." 9D not coded yet" ; 
 : opc-9E ( stz.x )   ." 9E not coded yet" ; 
 
-: opc-9F ( sta.lx ) dup  mode.lx  store.a ;
+: opc-9F ( sta.lx )  dup  mode.lx  store.a ;
 
 \ We need PC+fetch.xy for PC because no MODE.* used
 : opc-A0 ( ldy.# )  PC24 fetch.xy  Y !  check-NZ.y  PC+fetch.xy ;
@@ -847,12 +853,12 @@ cr .( Defining opcode routines ... )
 
 : opc-AA ( tax )  dup x-flag set? if mask8 else mask16 then  X !  check-NZ.x ; 
 
-: opc-AB ( plb )  \ p. 383  Note affects N and Z flags; always 8 bit in size
+: opc-AB ( plb )  \ Note affects N and Z flags; always 8 bit in size
    pull8  dup check-Z dup check-N8  DBR ! ;
 
-: opc-AC ( ldy )  mode.abs  fetch.xy  Y !  check-NZ.y ;
-: opc-AD ( lda )  mode.abs  fetch.a  check-NZ.a ;
-: opc-AE ( ldx )  mode.abs  fetch.xy  X !  check-NZ.x ;
+: opc-AC ( ldy )  mode.abs.DBR  fetch.xy  Y !  check-NZ.y ;
+: opc-AD ( lda )  mode.abs.DBR  fetch.a  check-NZ.a ;
+: opc-AE ( ldx )  mode.abs.DBR  fetch.xy  X !  check-NZ.x ;
 : opc-AF ( lda.l ) mode.l  fetch.a  check-NZ.a PC+fetch.a ; 
 : opc-B0 ( bcs )  c-flag set? branch-if-true ;  
 
@@ -875,7 +881,7 @@ cr .( Defining opcode routines ... )
 : opc-BD ( lda.x )   ." BD not coded yet" ; 
 : opc-BE ( ldx.y )   ." BE not coded yet" ; 
 
-: opc-BF ( lda.lx )  mode.lx  fetch.a check-NZ.a ; \ TODO TESTME
+: opc-BF ( lda.lx )  mode.lx  fetch.a check-NZ.a ;
 
 : opc-C0 ( cpy.# )   ." C0 not coded yet" ; 
 : opc-C1 ( cmp.dxi )   ." C1 not coded yet" ; 
@@ -909,7 +915,7 @@ cr .( Defining opcode routines ... )
 : opc-CC ( cpy )   ." CC not coded yet" ; 
 : opc-CD ( cmp )   ." CD not coded yet" ; 
 
-: opc-CE ( dec )  mode.abs dec.mem ;
+: opc-CE ( dec )  mode.abs.DBR dec.mem ;
 
 : opc-CF ( cmp.l )   ." CF not coded yet" ; 
 
@@ -971,7 +977,7 @@ cr .( Defining opcode routines ... )
 : opc-EC ( cpx )   ." EC not coded yet" ; 
 : opc-ED ( sbc )   ." ED not coded yet" ; 
 
-: opc-EE ( inc )   mode.abs inc.mem ; \ p. 357  does not affect carry or decimal flag ; 
+: opc-EE ( inc )   mode.abs.DBR inc.mem ; \ Does not affect carry or decimal flag ; 
 
 : opc-EF ( sbc.l )   ." EF not coded yet" ; 
 
@@ -981,7 +987,7 @@ cr .( Defining opcode routines ... )
 : opc-F2 ( sbc.di )   ." F2 not coded yet" ; 
 : opc-F3 ( sbc.siy )   ." F3 not coded yet" ; 
 
-: opc-F4 ( phe.# )  next2bytes push16 PC+2 ; \ p. 372, does not affect flags
+: opc-F4 ( phe.# )  next2bytes push16 PC+2 ; \ Does not affect flags
 
 : opc-F5 ( sbc.dx )   ." F5 not coded yet" ; 
 : opc-F6 ( inc.dx )   ." F6 not coded yet" ; 
@@ -991,8 +997,7 @@ cr .( Defining opcode routines ... )
 
 : opc-F9 ( sbc.y )   ." F9 not coded yet" ; 
 
-: opc-FA ( plx )  \ p. 385  Note this sets N and Z 
-   pull.xy  X !  check-NZ.x ; 
+: opc-FA ( plx )  pull.xy  X !  check-NZ.x ; 
 
 : opc-FB ( xce )  e-flag @  c-flag @  swap  c-flag !  dup e-flag !
    if emulated else native then ; 

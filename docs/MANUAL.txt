@@ -1,7 +1,7 @@
 Manual for A Crude 65816 Emulator 
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 09. Jan 2015
-This version: 11. Sep 2015
+This version: 16. Sep 2015
 
 
 THIS DOCUMENT IS CURRENTLY MERELY A COLLECTION OF NOTES. WHEN IN DOUBT, USE THE SOURCE CODE. 
@@ -72,9 +72,23 @@ Note that currently most interrupt routines are not functional.
 
 OTHER USEFUL COMBINATIONS
 
+
+To walk through the program 
+
 step .state
 
+
+To walk through the program, showing the stack with every step (emulation mode only)
+
 step .state .stack
+
+
+To monitor an address every step, we can use the FETCH instructions. To watch what happens to $000000, for instance: 
+
+step .state  ." DP 00:"  0000 fetch16 . 
+
+
+
 
 EXECUTING A SINGLE INSTRUCTION
 

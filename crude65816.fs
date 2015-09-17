@@ -483,12 +483,11 @@ cr .( Defining addressing modes ...)
 \ TODO handle page boundries / wrapping
 : mode.d ( -- 65addr24)  next1byte  D @  +   00  mem16/bank>24  PC+1 ;
 
-\ Direct Page Indirect  
+\ Direct Page Indirect  (p. 302) 
 \ Note this uses the Data Bank Register DBR, not PBR
-\ TODO TESTME 
 \ TODO handle page boundries / wrapping
-\ : mode.di  ( -- 65addr24)  
-\   next1byte  D @  +  DBR  mem16/bank>24  fetch16  PC+1 ;
+: mode.di  ( -- 65addr24)  
+   next1byte  D @  +  0  mem16/bank>24  fetch16  DBR @  mem16/bank>24  PC+1 ;
 
 
 
@@ -665,7 +664,9 @@ cr .( Defining opcode routines ... )
 : opc-30 ( bmi )  n-flag set? branch-if-true ; 
 
 : opc-31 ( and.diy )   ." 31 not coded yet" ; 
-: opc-32 ( and.di )   ." 32 not coded yet" ; 
+
+: opc-32 ( and.di )  dup mode.di fetch.a and.a check-NZ.a ; \ TODO TESTME
+
 : opc-33 ( and.siy )   ." 33 not coded yet" ; 
 : opc-34 ( bit.dx )   ." 34 not coded yet" ; 
 : opc-35 ( and.dx )   ." 35 not coded yet" ; 
@@ -714,7 +715,9 @@ cr .( Defining opcode routines ... )
 : opc-50 ( bvc )  v-flag clear? branch-if-true ; 
 
 : opc-51 ( eor.diy )   ." 51 not coded yet" ; 
-: opc-52 ( eor.di )   ." 52 not coded yet" ; 
+
+: opc-52 ( eor.di )  dup mode.di  fetch.a eor.a check-NZ.a ; \ TODO TESTME
+
 : opc-53 ( eor.siy )   ." 53 not coded yet" ; 
 : opc-54 ( mvn )   ." 54 not coded yet" ; 
 : opc-55 ( eor.dx )   ." 55 not coded yet" ; 
@@ -813,7 +816,9 @@ cr .( Defining opcode routines ... )
 : opc-90 ( bcc )  c-flag clear? branch-if-true ; 
 
 : opc-91 ( sta.diy )   ." 91 not coded yet" ; 
-: opc-92 ( sta.di )   ." 92 not coded yet" ; 
+
+: opc-92 ( sta.di )  dup mode.di  store.a ;
+
 : opc-93 ( sta.siy )   ." 93 not coded yet" ; 
 : opc-94 ( sty.dx )   ." 94 not coded yet" ; 
 : opc-95 ( sta.dx )   ." 95 not coded yet" ; 
@@ -867,10 +872,7 @@ cr .( Defining opcode routines ... )
 : opc-A9 ( lda.# ) PC24 fetch.a  check-NZ.a  PC+fetch.a ; 
 
 : opc-AA ( tax )  dup x-flag set? if mask8 else mask16 then  X !  check-NZ.x ; 
-
-: opc-AB ( plb )  \ Note affects N and Z flags; always 8 bit in size
-   pull8  dup check-Z dup check-N8  DBR ! ;
-
+: opc-AB ( plb )  pull8  dup check-Z dup check-N8  DBR ! ;
 : opc-AC ( ldy )  mode.abs.DBR  fetch.xy  Y !  check-NZ.y ;
 : opc-AD ( lda )  mode.abs.DBR  fetch.a  check-NZ.a ;
 : opc-AE ( ldx )  mode.abs.DBR  fetch.xy  X !  check-NZ.x ;
@@ -878,7 +880,9 @@ cr .( Defining opcode routines ... )
 : opc-B0 ( bcs )  c-flag set? branch-if-true ;  
 
 : opc-B1 ( lda.diy )   ." B1 not coded yet" ; 
-: opc-B2 ( lda.di )   ." B2 not coded yet" ; 
+
+: opc-B2 ( lda.di )  mode.di  fetch.a  check-NZ.a ; 
+
 : opc-B3 ( lda.siy )   ." B3 not coded yet" ; 
 : opc-B4 ( ldy.dx )   ." B4 not coded yet" ; 
 : opc-B5 ( lda.dx )   ." B5 not coded yet" ; 
@@ -940,8 +944,7 @@ cr .( Defining opcode routines ... )
 : opc-D2 ( cmp.di )   ." D2 not coded yet" ; 
 : opc-D3 ( cmp.siy )   ." D3 not coded yet" ; 
 
-: opc-D4 ( phe.di )  \ p. 373
-   ." D4 not coded yet" ; 
+: opc-D4 ( phe.d )  mode.d fetch16 push16 ; \ pp. 169, 373
 
 : opc-D5 ( cmp.dx )   ." D5 not coded yet" ; 
 : opc-D6 ( dec.dx )   ." D6 not coded yet" ; 

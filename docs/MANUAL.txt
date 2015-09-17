@@ -1,7 +1,7 @@
 Manual for A Crude 65816 Emulator 
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 09. Jan 2015
-This version: 16. Sep 2015
+This version: 17. Sep 2015
 
 
 THIS DOCUMENT IS CURRENTLY MERELY A COLLECTION OF NOTES. WHEN IN DOUBT, USE THE SOURCE CODE. 
@@ -42,6 +42,7 @@ In case you are new to Forth, a remember: it is not a programming language, but 
 
 The Crude Emulator current supports the following addition commands. Note that by Forth convention, a command that starts with a dot (".state") prints some information to the screen. 
 
+        .direct         - print the Direct Page based on D register
         .stack          - print the 65816 stack if in emulated mode
         .state          - print the CPU state (register content, etc)
         bye             - end emulation (normal Forth command) 
@@ -55,7 +56,7 @@ The Crude Emulator current supports the following addition commands. Note that b
         run             - run the emulator continuously
         step            - run one instruction in single-step mode
 
-"step" is usually used in combination with ".state" ("step .state") to show the status of the emulator after every step. Because of the nature of Forth, any word defined in the emulator can be used from the command line. For example, to get a dump of a memory range, we can use a command such as 
+STEP is usually used in combination with .STATE ("step .state") to show the status of the emulator after every step. Because of the nature of Forth, any word defined in the emulator can be used from the command line. For example, to get a dump of a memory range, we can use a command such as 
 
         00e000 memory +  4 dump 
 
@@ -83,7 +84,7 @@ To walk through the program, showing the stack with every step (emulation mode o
 step .state .stack
 
 
-To monitor an address every step, we can use the FETCH instructions. To watch what happens to $000000, for instance: 
+To monitor a memory address every step, we can use the FETCH instructions. To watch what happens to $000000, for instance: 
 
 step .state  ." DP 00:"  0000 fetch16 . 
 
@@ -92,7 +93,7 @@ step .state  ." DP 00:"  0000 fetch16 .
 
 EXECUTING A SINGLE INSTRUCTION
 
-FEHLT 
+(opc-<MN>)
 
 
 

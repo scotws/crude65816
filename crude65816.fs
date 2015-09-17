@@ -476,6 +476,10 @@ cr .( Defining addressing modes ...)
 : mode.lx ( -- 65addr24)  mode.l  X @  + ; 
 
 \ Direct Page (pp. 94, 155, 278) 
+\ Nobody seems to be sure what happens in emulation mode if you set D to
+\ a 16-bit value (see http://forum.6502.org/viewtopic.php?f=8&t=3459 for
+\ a discussion). We currently assume that you can manipulate it the same way
+\ you can in native mode.
 \ TODO handle page boundries / wrapping
 : mode.d ( -- 65addr24)  next1byte  D @  +   00  mem16/bank>24  PC+1 ;
 
@@ -550,12 +554,23 @@ cr .( Creating output functions ...)
             ." Stack is empty (S is 01FF in emulated mode)" cr  else
          0200  S @ 1+  ?do  i dup .  space  fetch8 .mask8  cr  loop 
       then then ; 
-   
+
+\ Print Direct Page contents. We use D as a base regardless of which mode we are
+\ in; see MODE.D for discussion of what happens with D in emulation mode.
+\ Assumes HEX.
+: .direct ( -- ) 
+   cr ."       00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F"
+   10 0 ?do  cr  D @  i +  .mask16 ."  " 
+      10 0 ?do   D @  i +  j +  fetch8 .mask8
+   loop loop cr ; 
+
+
 
 \ ---- OPCODE ROUTINES ----
 cr .( Defining opcode routines ... ) 
 
 \ TODO change so we drop into single-step mode
+\ TODO add stack stuff
 : opc-00 ( brk )   cr ." *** BRK encountered, halting CPU (ALPHA only) ***" 
    .state quit ; 
 

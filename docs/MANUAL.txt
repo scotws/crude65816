@@ -128,4 +128,9 @@ The Crude Emulator internally uses an assembler variant called "Typist's Assembl
     block move                mvp 0,0            0 0 mvp      (65816) 
 
 
+KNOWN ISSUES
+
+It is unclear what happens if you store a 16-bit value in D during emulation mode (see http://forum.6502.org/viewtopic.php?f=8&t=3459 for a discussion about this question). We currently assume that it will work the same way as in native mode, though this question needs to be settled experimentally.
+
+
 END

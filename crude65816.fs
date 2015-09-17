@@ -454,8 +454,8 @@ cr .( Defining addressing modes ...)
 \ Absolute 
 \ We need two different versions, one for instructions that affect data and take
 \ the DBR, and one for instructions that affect programs and take the PBR
-: mode.abs.PBR ( -- 65addr24 )  next2bytes mem16/PBR>24 PC+2 ;
 : mode.abs.DBR ( -- 65addr24 )  next2bytes mem16/DBR>24 PC+2 ;
+: mode.abs.PBR ( -- 65addr24 )  next2bytes mem16/PBR>24 PC+2 ;
 
 \ Absolute Indirect 
 : mode.i  ( -- 65addr24)  mode.abs.PBR  fetch16  mem16/PBR>24 ;
@@ -463,12 +463,11 @@ cr .( Defining addressing modes ...)
 \ Absolute Long 
 : mode.l  ( -- 65addr24)  next3bytes PC+3 ;
 
-\ Absolute X/Y Indexed 
-\ TODO TESTME  
+\ Absolute Indexed X/Y (pp. 289-290) 
+\ Assumes that X will be the correct width (8 or 16 bit)
 \ TODO handle wrapping
-\ TODO Figure out if we want MODE.ABS.PBR or .DBR
-\ : mode.x  ( -- 65addr24 )  mode.abs  X @  + ;
-\ : mode.y  ( -- 65addr24 )  mode.abs  Y @  + ;
+: mode.x  ( -- 65addr24 )  mode.abs.DBR  X @  + ;
+: mode.y  ( -- 65addr24 )  mode.abs.DBR  Y @  + ;
 
 \ Absolute Long X Indexed 
 \ This assumes that X will be the correct width (8 or 16 bit) 
@@ -498,9 +497,10 @@ cr .( Creating output functions ...)
 : .8bits ( u -- ) 
    2 base !  s>d <# # # # # # # # # #> type  hex ; 
 
-\ Format numbers to two, four places, assumes HEX
-: .mask8 ( n -- addr u )  s>d <# # # #> type space ; 
-: .mask16 ( n -- addr u )  s>d <# # # # # #> type space ; 
+\ Format numbers to two, four, and six places, assumes HEX
+: .mask8 ( n -- )  s>d <# # # #> type space ; 
+: .mask16 ( n -- )  s>d <# # # # # #> type space ; 
+: .mask24 ( n -- )  s>d <# # # # # # # #> type space ; 
 
 \ Print state of machine 
 \ TODO rewrite this once we know what we really want to see
@@ -558,10 +558,10 @@ cr .( Creating output functions ...)
 \ in; see MODE.D for discussion of what happens with D in emulation mode.
 \ Assumes HEX.
 : .direct ( -- ) 
-   cr ."       00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F"
-   10 0 ?do  cr  D @  i +  .mask16 ."  " 
-      10 0 ?do   D @  i +  j +  fetch8 .mask8
-   loop loop cr ; 
+   cr ."        0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F"
+   100 0 ?do  cr  D @  i +  .mask16 ."  " 
+      10 0 ?do   D @  i +  j +  fetch8 .mask8 loop 
+   10 +loop cr ; 
 
 
 
@@ -623,8 +623,11 @@ cr .( Defining opcode routines ... )
       S ! ;
 
 : opc-1C ( trb )   ." 1C not coded yet" ; 
-: opc-1D ( ora.x )   ." 1D not coded yet" ; 
-: opc-1E ( asl.x )   ." 1E not coded yet" ; 
+
+: opc-1D ( ora.x )   dup mode.x fetch.a ora.a check-NZ.a ; \ TODO TEST ME
+
+: opc-1E ( asl.x )  ." 1E not coded yet" ;  
+
 : opc-1F ( ora.lx )  dup mode.lx  fetch.a  ora.a  check-NZ.a ; \ TODO TEST ME 
 
 \ STEP already increases the PC by one, so we only need to add one byte because
@@ -655,7 +658,7 @@ cr .( Defining opcode routines ... )
 
 : opc-2C ( bit )   ." 2C not coded yet" ; 
 
-: opc-2D ( and )  dup mode.abs.DBR  fetch.a  and.a  check-NZ.a ;  \ TODO TESTME
+: opc-2D ( and )  dup mode.abs.DBR  fetch.a  and.a  check-NZ.a ;  \ TODO TEST ME
 
 : opc-2E ( rol )   ." 2E not coded yet" ; 
 
@@ -665,7 +668,7 @@ cr .( Defining opcode routines ... )
 
 : opc-31 ( and.diy )   ." 31 not coded yet" ; 
 
-: opc-32 ( and.di )  dup mode.di fetch.a and.a check-NZ.a ; \ TODO TESTME
+: opc-32 ( and.di )  dup mode.di fetch.a and.a check-NZ.a ; \ TODO TEST ME
 
 : opc-33 ( and.siy )   ." 33 not coded yet" ; 
 : opc-34 ( bit.dx )   ." 34 not coded yet" ; 
@@ -683,7 +686,9 @@ cr .( Defining opcode routines ... )
 : opc-3B ( tsc )  drop  S @  mask16  check-NZ.a ; 
 
 : opc-3C ( bit.x )   ." 3C not coded yet" ; 
-: opc-3D ( and.x )   ." 3D not coded yet" ; 
+
+: opc-3D ( and.x )   dup mode.x fetch.a and.a check-NZ.a ;
+
 : opc-3E ( rol.x )   ." 3E not coded yet" ; 
 
 : opc-3F ( and.lx )  dup mode.lx  fetch.a  and.a  check-NZ.a ; \ TODO TEST ME 
@@ -844,9 +849,8 @@ cr .( Defining opcode routines ... )
             
 : opc-9B ( txy )  X @  Y !  check-NZ.y ;
 : opc-9C ( stz )  0  mode.abs.DBR store.a ; 
-
-: opc-9D ( sta.x )   ." 9D not coded yet" ; 
-: opc-9E ( stz.x )   ." 9E not coded yet" ; 
+: opc-9D ( sta.x )   dup mode.x  store.a ; 
+: opc-9E ( stz.x ) 0 mode.x  store.a ;
 
 : opc-9F ( sta.lx )  dup  mode.lx  store.a ;
 
@@ -895,9 +899,9 @@ cr .( Defining opcode routines ... )
 
 : opc-BA ( tsx )  S @  x-flag set? if mask8 then  X !  check-NZ.x ;  
 : opc-BB ( tyx )  Y @  X !  check-NZ.x ;
+: opc-BC ( ldy.x )  mode.x  fetch.xy  Y !  check-NZ.y ;
+: opc-BD ( lda.x )  mode.x  fetch.a  check-NZ.a ;
 
-: opc-BC ( ldy.x )   ." BC not coded yet" ; 
-: opc-BD ( lda.x )   ." BD not coded yet" ; 
 : opc-BE ( ldx.y )   ." BE not coded yet" ; 
 
 : opc-BF ( lda.lx )  mode.lx  fetch.a check-NZ.a ;

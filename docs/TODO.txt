@@ -1,7 +1,7 @@
 TODO for A Crude 65816 Emulator
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 27. May 2015
-This version: 17. Sep 2015
+This version: 18. Sep 2015
 
 
 TODO SHORT TERM
@@ -22,8 +22,7 @@ NICE TO HAVE
 
 QUESTIONS 
 
-- What happens when D is loaded with a 16-bit value in Emulation Mode? See http://forum.6502.org/viewtopic.php?f=8&t=3459 for details on this discussion.
-
+(Too many to list)
 
 END
 

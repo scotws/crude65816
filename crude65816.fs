@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 17. Sep 2015 
+\ This version: 18. Sep 2015 
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -475,10 +475,8 @@ cr .( Defining addressing modes ...)
 : mode.lx ( -- 65addr24)  mode.l  X @  + ; 
 
 \ Direct Page (pp. 94, 155, 278) 
-\ Nobody seems to be sure what happens in emulation mode if you set D to
-\ a 16-bit value (see http://forum.6502.org/viewtopic.php?f=8&t=3459 for
-\ a discussion). We currently assume that you can manipulate it the same way
-\ you can in native mode.
+\ Note that D can be relocated in Emulated Mode as well, see
+\ http://forum.6502.org/viewtopic.php?f=8&t=3459&p=40389#p40370 for details
 \ TODO handle page boundries / wrapping
 : mode.d ( -- 65addr24)  next1byte  D @  +   00  mem16/bank>24  PC+1 ;
 

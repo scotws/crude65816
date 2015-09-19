@@ -1,16 +1,20 @@
 TODO for A Crude 65816 Emulator
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 27. May 2015
-This version: 18. Sep 2015
+This version: 20. Sep 2015
+
+IMMEDIATELY 
+
+- Replace PC as A on TOS, completely rewriting the whole code. FML.
 
 
-TODO SHORT TERM
+SHORT TERM
 
 - Code all opcodes before doing anything else
 - Avoid all optimization before we know if we're going to have to rewrite
 
 
-TODO LONG TERM 
+LONG TERM 
 
 - Add FREEZE/THAW commands to save state of emulator to disk
 

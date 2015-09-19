@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 18. Sep 2015 
+\ This version: 20. Sep 2015 
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version pre-ALPHA  17. Sep 2015)  
+cr .( Version pre-ALPHA  20. Sep 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -55,11 +55,11 @@ defer mask.xy
 : mask8 ( u -- u8 ) 0ff and ; 
 : mask16 ( u -- u16 ) 0ffff and ; 
 : mask24 ( u -- u24 ) 0ffffff and ; 
-: mask.B ( u16 -- u16 ) 0ff00 and ; \ used for B register 
+: mask.b ( u16 -- u16 ) 0ff00 and ; \ used for B register 
 
 \ return least, most significant byte of 16-bit number
 : lsb ( u -- u8 )  mask8 ;
-: msb ( u -- u8 )  mask.B  8 rshift ;
+: msb ( u -- u8 )  mask.b  8 rshift ;
 : bank ( u -- u8 )  10 rshift  mask8 ; \ assumes HEX
 
 \ 16 bit addresses and endian conversion
@@ -89,7 +89,7 @@ defer mask.xy
 
 \ Handle wrapping for 8-bit and 16-bit additions TODO TESTME 
 \ TODO See if we want to changed the c-flag directly
-: wrap8&c ( u -- u8 f )  dup mask8 swap  mask.B  0= invert ; 
+: wrap8&c ( u -- u8 f )  dup mask8 swap  mask.b  0= invert ; 
 : wrap16&c ( u -- u16 f ) dup mask16 swap  0ff0000 and  0= invert ; 
 
 \ handle Program Counter
@@ -107,7 +107,7 @@ defer PC+fetch.a
 defer PC+fetch.xy
 
 \ Rescue B part of Accumulator. Used by AND for example
-: rescue.b ( C u -- B C u )  over mask.B -rot ; 
+: rescue.b ( C u -- B C u )  over mask.b -rot ; 
 
 
 \ ---- MEMORY ----
@@ -238,6 +238,10 @@ c-flag @  01 and + ;
 
 \ Note that checks that work on A/C have their own DUP in violation of 
 \ usual Forth convention. Assumes HEX
+
+\ Assumes that calling word has prepared length correctly
+: check-C  ( A n -- )  < if c-flag clear else c-flag set then ; 
+
 defer check-N.a   defer check-N.x   defer check-N.y
 : check-N8 ( n -- )  80 and  if n-flag set  else  n-flag clear  then ;
 : check-N16 ( n -- )  8000 and  if n-flag set  else  n-flag clear  then ;
@@ -256,16 +260,17 @@ defer check-Z.a
 : check-Z.y ( -- )  Y @  check-Z ; 
 
 \ common combinations
-: check-NZ.8 ( n8 -- )  dup check-N8  dup check-Z ; 
-: check-NZ.16 ( n16 --)  dup check-N16  dup check-Z ; 
+: check-NZ.8 ( n8 -- n8 )  dup check-N8  dup check-Z ; 
+: check-NZ.16 ( n16 -- n16)  dup check-N16  dup check-Z ; 
 : check-NZ.a ( -- )  check-N.a  check-Z.a ; 
 : check-NZ.x ( -- )  check-N.x  check-Z.x ; 
 : check-NZ.y ( -- )  check-N.y  check-Z.y ; 
  
+\ make sure A is the right size (usually paranoid) 
+: mask.a ( u -- u ) m-flag set? if mask8 else mask16 then ; 
 
 \ ----- ALU COMMANDS ---- 
-\ TODO test the checks for N,Z 
-
+\
 defer and.a
 : and8  ( u8 u8 -- u8 )  rescue.b  and mask8  or ;  
 : and16 ( u16 u16 -- u16 )  and mask16 ; \ paranoid 
@@ -280,12 +285,12 @@ defer ora.a
 
 \ Used for Accumulator, note inc.a is the code itself
 defer inc.accu 
-: inc8  ( u8 -- u8 ) dup mask.B  swap  1+ mask8  check-NZ.8  or ; 
+: inc8  ( u8 -- u8 ) dup mask.b  swap  1+ mask8  check-NZ.8  or ; 
 : inc16  ( u16 -- u16 )  1+ mask16  check-NZ.16 ; 
 
 \ Used for Accumulator, note dec.a is the code itself
 defer dec.accu 
-: dec8  ( u8 -- u8 ) dup mask.B  swap  1- mask8  check-NZ.8  or ; 
+: dec8  ( u8 -- u8 ) dup mask.b  swap  1- mask8  check-NZ.8  or ; 
 : dec16  ( u16 -- u16 )  1- mask16  check-NZ.16 ; 
 
 \ Used for memory, not Accumulator, but affected by size of Accumulator
@@ -298,6 +303,14 @@ defer dec.mem
 : dec8.mem  ( 65addr -- )  dup fetch8 1- mask8  check-NZ.8  swap store8 ; 
 : dec16.mem  ( 65addr -- )  dup fetch16 1- mask16  check-NZ.16  swap store16 ; 
 
+\ Includes general routines for all CMP instructions
+\ See http://www.6502.org/tutorials/compare_beyond.html for discussion
+defer cmp.a
+defer cmp.xy
+: cmp8  ( AXY u -- )  2dup check-C - check-NZ.8 drop ; 
+: cmp16  ( AXY u -- )  2dup check-C  - check-NZ.16  drop ; 
+: cmp8.a  ( A u8 -- )  swap mask8 swap cmp8 ; 
+: cmp16.a  ( A u16 -- ) cmp16 ; 
 
 \ --- BRANCHING --- 
 cr .( Setting up branching ...) 
@@ -346,7 +359,7 @@ defer pull.xy
 : pull24 ( -- n24 )  pull8 pull8 pull8 lsb/msb/bank>24 ; 
    
 \ We need a special pull8 for A in eight bit mode because we need to protect B
-: pull8.a  ( u16 -- u16 ) mask.B pull8 or ; 
+: pull8.a  ( u16 -- u16 ) mask.b pull8 or ; 
 : pull16.a  ( u16 -- u16 ) drop pull16 ; 
 
 
@@ -367,6 +380,7 @@ defer pull.xy
    ['] dec16 is dec.accu
    ['] inc16.mem is inc.mem
    ['] dec16.mem is dec.mem
+   ['] cmp16.a is cmp.a
    ['] S++16 is S++.a
    ['] S--16 is S--.a
    ['] push16 is push.a 
@@ -386,6 +400,7 @@ defer pull.xy
    ['] dec8 is dec.accu 
    ['] inc8.mem is inc.mem
    ['] dec8.mem is dec.mem
+   ['] cmp8.a is cmp.a
    ['] S++8 is S++.a
    ['] S--8 is S--.a
    ['] push8 is push.a 
@@ -400,6 +415,7 @@ defer pull.xy
    ['] PC+2 is PC+fetch.xy
    ['] check-N.x16 is check-N.x
    ['] check-N.y16 is check-N.y
+   ['] cmp16 is cmp.xy
    ['] S++16 is S++.xy
    ['] S--16 is S--.xy
    ['] push16 is push.xy 
@@ -414,6 +430,7 @@ defer pull.xy
    ['] PC+1 is PC+fetch.xy
    ['] check-N.x8 is check-N.x
    ['] check-N.y8 is check-N.y
+   ['] cmp8 is cmp.xy
    ['] S++8 is S++.xy
    ['] S--8 is S--.xy
    ['] push8 is push.xy 
@@ -485,7 +502,6 @@ cr .( Defining addressing modes ...)
 \ TODO handle page boundries / wrapping
 : mode.di  ( -- 65addr24)  
    next1byte  D @  +  0  mem16/bank>24  fetch16  DBR @  mem16/bank>24  PC+1 ;
-
 
 
 \ ---- OUTPUT FUNCTIONS ----
@@ -610,7 +626,7 @@ cr .( Defining opcode routines ... )
 
 : opc-18 ( clc )  c-flag clear ; 
 
-: opc-19 ( ora.y )   ." 19 not coded yet" ; 
+: opc-19 ( ora.y )   dup mode.y fetch.a ora.a check-NZ.a ; \ TODO TEST ME
 
 : opc-1A ( inc.a )   inc.accu ;
 
@@ -676,7 +692,7 @@ cr .( Defining opcode routines ... )
 
 : opc-38 ( sec )  c-flag set ;  
 
-: opc-39 ( and.y )   ." 39 not coded yet" ; 
+: opc-39 ( and.y )  dup mode.y fetch.a and.a check-NZ.a ; \ TODO TEST ME
 
 : opc-3A ( dec.a )  dec.accu ;
 
@@ -729,14 +745,14 @@ cr .( Defining opcode routines ... )
 
 : opc-58 ( cli )  i-flag clear ;  
 
-: opc-59 ( eor.y )   ." 59 not coded yet" ; 
+: opc-59 ( eor.y )  dup mode.y fetch.a eor.a check-NZ.a ; \ TODO TESTME
 
 : opc-5A ( phy )  Y @ push.xy ; 
 : opc-5B ( tcd )  dup  mask16  D ! check-NZ.a ;  \ mask16 is paranoid
 : opc-5C ( jmp.l )  next3bytes 24>PC24 ; 
+: opc-5D ( eor.x )  dup mode.x  fetch.a eor.a check-NZ.a ; \ TODO TESTME
 
-: opc-5D ( eor.dx )   ." 5D not coded yet" ; 
-: opc-5E ( lsr.x )   ." 5E not coded yet" ; 
+: opc-5E ( lsr.x )  ." 5E not coded yet" ; 
 
 : opc-5F ( eor.lx )  dup mode.lx  fetch.a  eor.a  check-NZ.a ; \ TODO TEST ME
 
@@ -808,7 +824,7 @@ cr .( Defining opcode routines ... )
 : opc-8A ( txa )  \ TODO test what happens to B register
    m-flag clear? if  
       drop  X @  else
-      mask.B  X @  mask8 or  then 
+      mask.b  X @  mask8 or  then 
       check-NZ.a ; 
 
 : opc-8B ( phb )  DBR @  mask8  push8 ; \ mask8 is paranoid 
@@ -831,7 +847,7 @@ cr .( Defining opcode routines ... )
 : opc-98 ( tya )  \ TODO test what happens to B register
    m-flag clear? if  
       drop  Y @  else
-      mask.B  Y @  mask8 or  then 
+      mask.b  Y @  mask8 or  then 
       check-NZ.a ; 
 
 : opc-99 ( sta.y )   ." 99 not coded yet" ; 
@@ -893,14 +909,13 @@ cr .( Defining opcode routines ... )
 
 : opc-B8 ( clv ) v-flag clear ; 
 
-: opc-B9 ( lda.y )   ." B9 not coded yet" ; 
-
+: opc-B9 ( lda.y )   mode.x  fetch.a  check-NZ.a ; \ TODO TESTME
 : opc-BA ( tsx )  S @  x-flag set? if mask8 then  X !  check-NZ.x ;  
 : opc-BB ( tyx )  Y @  X !  check-NZ.x ;
 : opc-BC ( ldy.x )  mode.x  fetch.xy  Y !  check-NZ.y ;
 : opc-BD ( lda.x )  mode.x  fetch.a  check-NZ.a ;
 
-: opc-BE ( ldx.y )   ." BE not coded yet" ; 
+: opc-BE ( ldx.y )   mode.y fetch.xy  X !  check-NZ.y ; \ TODO TESTME
 
 : opc-BF ( lda.lx )  mode.lx  fetch.a check-NZ.a ;
 
@@ -925,7 +940,9 @@ cr .( Defining opcode routines ... )
 
 : opc-C8 ( iny )  Y @  1+  mask.xy  Y !  check-NZ.y ;
 
-: opc-C9 ( cmp.# )   ." C9 not coded yet" ; 
+\ Double DUP because fetch.a assumes we want to replace A and CMP doesn't touch
+\ the registers
+: opc-C9 ( cmp.# )  dup dup PC24 fetch.a mask.a cmp.a PC+fetch.a ; 
 
 : opc-CA ( dex )  X @  1- mask.xy  X !  check-NZ.x ;
 
@@ -934,7 +951,8 @@ cr .( Defining opcode routines ... )
    cr ." WARNING: WAI not fully implemented" ; 
 
 : opc-CC ( cpy )   ." CC not coded yet" ; 
-: opc-CD ( cmp )   ." CD not coded yet" ; 
+
+: opc-CD ( cmp )  ." CD not coded yet" ; 
 
 : opc-CE ( dec )  mode.abs.DBR dec.mem ;
 

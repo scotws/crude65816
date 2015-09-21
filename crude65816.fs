@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 20. Sep 2015 
+\ This version: 21. Sep 2015 
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version pre-ALPHA  20. Sep 2015)  
+cr .( Version pre-ALPHA  21. Sep 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -36,9 +36,8 @@ hex
 cr .( Setting up CPU ... ) 
 
 \ Names follow the convention from the WDC data sheet
-\ Note the Accumulator (A/B/C) is top of stack (TOS) but we don't include 
-\ this is the stack comments because it would drive us nuts
-variable PC    \ program counter (16 bit) 
+variable PC    \ Program counter (16 bit) 
+variable C     \ C register (16 bit); MSB is B, LSB is A
 variable X     \ X register (8\16 bit)
 variable Y     \ Y register (8\16 bit)
 variable D     \ Direct register (Zero Page on 6502) (16 bit) 
@@ -49,18 +48,41 @@ variable PBR   \ Program Bank register ("K") (8 bit)
 
 
 \ ---- HELPER FUNCTIONS ----
+cr .( Creating helper functions ...) 
+\ These all assume HEX
 
 \ mask addresses / hex numbers
-defer mask.xy
+defer mask.a  defer mask.xy
 : mask8 ( u -- u8 ) 0ff and ; 
 : mask16 ( u -- u16 ) 0ffff and ; 
 : mask24 ( u -- u24 ) 0ffffff and ; 
-: mask.b ( u16 -- u16 ) 0ff00 and ; \ used for B register 
+: mask.b ( u -- u16 ) 0ff00 and ; \ used to protect B  
 
 \ return least, most significant byte of 16-bit number
 : lsb ( u -- u8 )  mask8 ;
-: msb ( u -- u8 )  mask.b  8 rshift ;
-: bank ( u -- u8 )  10 rshift  mask8 ; \ assumes HEX
+: msb ( u -- u8 )  0ff00 and  8 rshift ;
+: bank ( u -- u8 )  10 rshift  mask8 ;
+
+\ Extend the sign of an 8-bit/16-bit number in a way we don't have to care about
+\ how large the cell size on the Forth machine is. Assumes that TRUE flag is
+\ some form of FFFF. MASK8/MASK16 is paranoid. Assumes HEX.
+: signextend ( u8 -- u )  mask8 dup  80 and 0<>  8 lshift  or ; 
+: signextend.l ( u16 -- u ) mask16 dup  8000 and 0<> 10 lshift or ;
+
+\ Accumulator manipulation
+\ Because we are paranoid, we tend to MASK16 all registers before we store them
+\ in their variables
+: C>A ( u16 -- u8 ) lsb ;  \ gives us A from C during 8 to 16 bit switch
+: C>B ( u16 -- u8 ) msb ;  \ gives us B from C during 8 to 16 bit switch
+: A ( -- u8 ) C @  C>A ;  \ A is a word, not variable 
+: B ( -- u8 ) C @  C>B ;  \ B is a word, not variable 
+\ Save A into C, protecting B 
+: A>C! ( u8 -- )  B  8 lshift or  mask16  C ! ;
+
+\ Take values from TOS and store them in the Accumulator depending on their size
+defer >C 
+: 8>C! ( u8 -- )  mask8  B  8 lshift  or   C ! ; 
+: 16>C! ( u16 -- ) mask16  C ! ; 
 
 \ 16 bit addresses and endian conversion
 : 16>lsb/msb  ( u16 -- lsb msb )  dup lsb swap msb ; 
@@ -72,13 +94,17 @@ defer mask.xy
    dup 16>lsb/msb      ( u24 lsb msb )  
    swap rot            ( msb lsb u24 ) 
    bank -rot ;         ( bank msb lsb ) 
-
 : 24>lsb/msb/bank  ( u24 -- lsb msb bank ) 
    dup 16>lsb/msb      ( n lsb msb ) 
    rot bank ;          ( lsb msb bank) 
 
+\ Program Counter
+: PC+u ( u -- ) ( -- )  
+   create ,  does> @  PC @  +  mask16  PC ! ;
+1 PC+u PC+1   2 PC+u PC+2   3 PC+u PC+3
+
 \ Make 24 bit value the new 24 bit address
-: 24>PC24  ( 65addr -- )  24>lsb/msb/bank  PBR !  lsb/msb>16  PC ! ; 
+: 24>PC24!  ( 65addr24 -- )  24>lsb/msb/bank  PBR !  lsb/msb>16  PC ! ; 
 
 \ Convert various combinations to full 24 bit address. Assumes HEX 
 : mem16/bank>24  ( 65addr16 bank -- 65addr24 )  10 lshift or ; 
@@ -87,27 +113,11 @@ defer mask.xy
 : lsb/msb/bank>24  ( lsb msb bank -- 65addr24 )  
    -rot lsb/msb>16 swap mem16/bank>24 ; 
 
-\ Handle wrapping for 8-bit and 16-bit additions TODO TESTME 
-\ TODO See if we want to changed the c-flag directly
-: wrap8&c ( u -- u8 f )  dup mask8 swap  mask.b  0= invert ; 
-: wrap16&c ( u -- u16 f ) dup mask16 swap  0ff0000 and  0= invert ; 
-
-\ handle Program Counter
-: PC+u ( u -- ) ( -- )   
-   create ,
-   does> @ PC +! ;
-
-1 PC+u PC+1   2 PC+u PC+2   3 PC+u PC+3
+\ Advance PC depending on what size our registers are
+defer PC+a  defer PC+xy
 
 \ Get full 24 bit current address (PC plus PBR) 
 : PC24 ( -- 65addr24)  PC @  PBR @  mem16/bank>24 ; 
-
-\ Advance PC depending on what size our registers are
-defer PC+fetch.a   
-defer PC+fetch.xy
-
-\ Rescue B part of Accumulator. Used by AND for example
-: rescue.b ( C u -- B C u )  over mask.b -rot ; 
 
 
 \ ---- MEMORY ----
@@ -135,49 +145,37 @@ include config.fs
 cr .( Setting up I/O system ...)
 include io.fs
 
-\ Fetch from memory 
-\ Note that FETCH.A assumes we are going to replace A (the TOS) as in the LDA
-\ instructions. If we keep A (AND, ORA, EOR, etc), we need to include a DUP
-defer fetch.a   
-defer fetch.xy
+\ Fetch data from memory, depending on the size of the register in question 
+defer fetch.a  defer fetch.xy
 
 \ Get one byte, a double byte, or three bytes from any 24-bit memory address.
 \ Double bytes assume  little-endian storage in memory but returns it to the
-\ Forth data stack in "normal" big endian format. Note we don't advance the PC
-\ here so we can use these routines with stuff like stack manipulations
+\ Forth data stack in "normal" big endian format. We don't advance the PC here
+\ so we can use these routines with stuff like stack manipulations
 
 \ FETCH8 includes the check for special addresses (I/O chips, etc) so all other
 \ store words should be based on it
 : fetch8  ( 65addr24 -- u8 )  
    special-fetch?  dup 0= if     ( 65addr24 0|xt)
-      drop  memory +  c@  else
+      drop  memory +  c@  else   \ C@ means no MASK is required
       nip execute  then ; 
 : fetch16  ( 65addr24 -- u16 )  dup fetch8  swap 1+ fetch8  lsb/msb>16 ; 
 : fetch24  ( 65addr24 -- u24 )  
-   dup fetch8  over 1+ fetch8  
-   rot 2 + fetch8  
-   lsb/msb/bank>24 ; 
+   dup fetch8  over 1+ fetch8   rot 2 + fetch8  lsb/msb/bank>24 ; 
 
-\ We need special FETCH commands for A because we have the current value TOS and
-\ we need to protect B if A is 8 bits wide
-: fetch8.a ( u 65addr24 -- u16 )  fetch8  swap  0ff00 and  or ; 
-: fetch16.a  ( u 65addr24 -- u16 )  nip fetch16 ; 
-
-\ Store to memory 
-defer store.a   
-defer store.xy
+\ Store registers to memory, depending on size of register 
+defer store.a   defer store.xy
 
 \ STORE8 includes the check for special addresses (I/O chips, etc) so all other
 \ store words should be based on it
 : store8 ( u8 65addr24 -- ) 
    special-store?  dup 0= if     ( u8 65addr24 0|xt)
-      drop  memory +  c!  else
+      drop  memory +  c!  else   \ C! means that no MASK is required
       nip execute  then ; 
-
 : store16 ( u16 65addr24 -- ) \ store LSB first
    2dup swap lsb swap store8  swap msb swap 1+ store8 ; 
 : store24 ( u24 65addr24 -- ) 
-\ TODO rewrite 
+\ TODO This is horrible, rewrite 
    >r               ( u24  R: 65addr ) 
    24>bank/msb/lsb  ( bank msb lsb  R: 65addr)
    r> dup 1+ >r     ( bank msb lsb 65addr  R: 65addr+1)
@@ -186,8 +184,8 @@ defer store.xy
    store8           ( bank  R: 65addr+2)
    r> store8 ; 
 
-
-\ Read current bytes in stream. Note we use PBR, not DBR
+\ Read current bytes in stream. Note we use PBR, not DBR. These do not advance
+\ the PC
 : next1byte ( -- u8 )  PC24 fetch8 ; 
 : next2bytes ( -- u16 )  PC24 fetch16 ; 
 : next3bytes ( -- u24 )  PC24 fetch24 ; 
@@ -203,15 +201,17 @@ variable x-flag   variable b-flag   variable d-flag
 variable i-flag   variable z-flag   variable c-flag 
 variable e-flag 
 
-\ make flag code easier for humans to read
+\ make flag code easier for humans to work with 
 : set?  ( addr -- f )  @ ;  
 : clear?  ( addr -- f )  @ invert ;
 : set  ( addr -- )  true swap ! ; 
 : clear  ( addr -- )  false swap ! ; 
 
+\ Status Byte 
 defer status-r
 
-\ construct status byte for emulation mode 
+\ emulation mode 
+\ TODO change -R8 to -E and -R16 to -N 
 : status-r8  ( -- u8 ) 
 n-flag @  80 and 
 v-flag @  40 and +
@@ -222,7 +222,7 @@ i-flag @  04 and +
 z-flag @  02 and +
 c-flag @  01 and + ; 
 
-\ construct status byte for native mode
+\ native mode
 : status-r16  ( -- u8 ) 
 n-flag @  80 and 
 v-flag @  40 and +
@@ -236,94 +236,108 @@ c-flag @  01 and + ;
 
 \ ---- TEST AND SET FLAGS ----
 
-\ Note that checks that work on A/C have their own DUP in violation of 
-\ usual Forth convention. Assumes HEX
+\ The basic, unspecific routines consume TOS, the derived functions do not
+\ TODO Rewrite and combine these once we know what we are doing 
 
-\ Assumes that calling word has prepared length correctly
-: check-C  ( A n -- )  < if c-flag clear else c-flag set then ; 
+\ Carry Flag
+defer check-C.a  defer check-C.x  defer check-C.y
+: check-C  ( n n -- )  < if  c-flag clear  else  c-flag set  then ; 
 
-defer check-N.a   defer check-N.x   defer check-N.y
+\ MASKs are paranoid 
+: check-C.a8  ( n8 -- )  A  check-C ;
+: check-C.a16  ( n16 -- )  C @  mask16 check-C ; 
+: check-C.x8  ( n8 -- )  X @  mask8 check-C ; 
+: check-C.x16  ( n16 -- )  X @  mask16 check-C ; 
+: check-C.y8  ( n8 -- )  Y @  mask8 check-C ; 
+: check-C.y16  ( n16 -- )  Y @  mask16 check-C ; 
+
+\ Negative Flag
+defer check-N.a  defer check-N.x  defer check-N.y
 : check-N8 ( n -- )  80 and  if n-flag set  else  n-flag clear  then ;
 : check-N16 ( n -- )  8000 and  if n-flag set  else  n-flag clear  then ;
-: check-N.a8 ( n -- ) dup check-N8 ; 
-: check-N.a16 ( n -- ) dup check-N16 ; 
-: check-N.x8 ( n -- )  X @  check-N8 ; 
-: check-N.x16 ( n -- )  X @  check-N16 ; 
-: check-N.y8 ( n -- ) Y @  check-N8 ; 
-: check-N.y16 ( n -- ) Y @ check-N16 ;   
 
+\ MASKs are paranoid
+: check-N.a8 ( -- )  A check-N8 ;
+: check-N.a16 ( -- )  C @ check-N16 ; 
+: check-N.x8 ( -- )  X @  mask8 check-N8 ; 
+: check-N.x16 ( -- )  X @  mask16 check-N16 ; 
+: check-N.y8 ( -- )  Y @  mask8 check-N8 ; 
+: check-N.y16 ( -- )  Y @ mask16 check-N16 ;   
+
+\ Zero Flag
 defer check-Z.a
 : check-Z ( n -- )  if  z-flag clear  else  z-flag set  then ; 
-: check-Z.a8 ( -- ) dup 0ff AND  check-Z ;    \ ignore B
-: check-Z.a16 ( -- ) dup 0ffff AND  check-Z  ; 
+
+: check-Z.a8 ( -- )  A check-Z ;
+: check-Z.a16 ( -- )  C @  check-Z ; 
 : check-Z.x ( -- )  X @  check-Z ;
 : check-Z.y ( -- )  Y @  check-Z ; 
 
-\ common combinations
-: check-NZ.8 ( n8 -- n8 )  dup check-N8  dup check-Z ; 
-: check-NZ.16 ( n16 -- n16)  dup check-N16  dup check-Z ; 
+\ Common combinations
+: check-NZ.8 ( n8 -- )  dup check-N8 check-Z ; 
+: check-NZ.16 ( n16 -- )  dup check-N16 check-Z ; 
 : check-NZ.a ( -- )  check-N.a  check-Z.a ; 
 : check-NZ.x ( -- )  check-N.x  check-Z.x ; 
 : check-NZ.y ( -- )  check-N.y  check-Z.y ; 
+: check-NZC.a ( -- )  check-N.a  check-Z.a  check-C.a ; 
+: check-NZC.x ( -- )  check-N.x  check-Z.x  check-C.x ; 
+: check-NZC.y ( -- )  check-N.y  check-Z.y  check-C.y ; 
  
-\ make sure A is the right size (usually paranoid) 
-: mask.a ( u -- u ) m-flag set? if mask8 else mask16 then ; 
 
 \ ----- ALU COMMANDS ---- 
-\
+
+\ TODO Combine these words once we know what we are doing
+
 defer and.a
-: and8  ( u8 u8 -- u8 )  rescue.b  and mask8  or ;  
-: and16 ( u16 u16 -- u16 )  and mask16 ; \ paranoid 
+: and8  ( u8 -- ) mask8 A and  A>C! ;  \ A is word, not variable 
+: and16 ( u16 -- ) mask16  C @  and  C ! ; 
 
 defer eor.a
-: eor8  ( u8 u8 -- u8 )  rescue.b  xor mask8  or ;  
-: eor16 ( u16 u16 -- u16 )  xor mask16 ; \ paranoid 
+: eor8  ( u8 -- ) mask8 A xor  A>C! ;
+: eor16 ( u16 -- ) mask16  C @  xor  C ! ; 
 
 defer ora.a
-: ora8  ( u8 u8 -- u8 )  rescue.b  or mask8  or ;  
-: ora16 ( u16 u16 -- u16 )  or mask16 ; \ paranoid 
+: ora8  ( u8 -- ) mask8 A or  A>C! ;
+: ora16 ( u16 -- ) mask16  C @  or  C ! ; 
 
-\ Used for Accumulator, note inc.a is the code itself
+\ TODO Combine these words once we know what we are doing
+
+\ INC for Accumulator. Note we can't use INC.A because this is the name of the 
+\ the 65816 instruction, which would be confusing 
 defer inc.accu 
-: inc8  ( u8 -- u8 ) dup mask.b  swap  1+ mask8  check-NZ.8  or ; 
-: inc16  ( u16 -- u16 )  1+ mask16  check-NZ.16 ; 
+: inc8  ( -- ) A 1+ mask8 dup check-NZ.8 A>C! ; 
+: inc16  ( -- ) C @  1+ mask16 dup check-NZ.16  C ! ; 
 
-\ Used for Accumulator, note dec.a is the code itself
+\ DEC for Accumulator. Note we can't use DEC.A because this is the name of the 
+\ the 65816 instruction, which would be confusing 
 defer dec.accu 
-: dec8  ( u8 -- u8 ) dup mask.b  swap  1- mask8  check-NZ.8  or ; 
-: dec16  ( u16 -- u16 )  1- mask16  check-NZ.16 ; 
+: dec8  ( -- ) A 1- mask8 dup check-NZ.8 A>C! ; 
+: dec16  ( -- ) C @  1- mask16 dup check-NZ.16  C ! ; 
 
 \ Used for memory, not Accumulator, but affected by size of Accumulator
 defer inc.mem  
-: inc8.mem  ( 65addr -- )  dup fetch8 1+ mask8  check-NZ.8  swap store8 ; 
-: inc16.mem  ( 65addr -- )  dup fetch16 1+ mask16  check-NZ.16  swap store16 ; 
+: inc8.mem  ( 65addr -- )  dup fetch8 1+ mask8  dup check-NZ.8  swap store8 ; 
+: inc16.mem  ( 65addr -- )  
+   dup fetch16 1+ mask16  dup check-NZ.16  swap store16 ; 
 
 \ Used for memory, not Accumulator, but affected by size of Accumulator
 defer dec.mem  
-: dec8.mem  ( 65addr -- )  dup fetch8 1- mask8  check-NZ.8  swap store8 ; 
-: dec16.mem  ( 65addr -- )  dup fetch16 1- mask16  check-NZ.16  swap store16 ; 
+: dec8.mem  ( 65addr -- )  dup fetch8 1- mask8  dup check-NZ.8  swap store8 ; 
+: dec16.mem  ( 65addr -- )  
+   dup fetch16 1- mask16  dup check-NZ.16  swap store16 ; 
 
-\ Includes general routines for all CMP instructions
-\ See http://www.6502.org/tutorials/compare_beyond.html for discussion
-defer cmp.a
-defer cmp.xy
-: cmp8  ( AXY u -- )  2dup check-C - check-NZ.8 drop ; 
-: cmp16  ( AXY u -- )  2dup check-C  - check-NZ.16  drop ; 
-: cmp8.a  ( A u8 -- )  swap mask8 swap cmp8 ; 
-: cmp16.a  ( A u16 -- ) cmp16 ; 
+\ Compare instructions 
+\ See http://www.6502.org/tutorials/compare_beyond.html for discussion TODO see
+\ if we need these or if we can use the CHECK-XX routines directly for the CMP
+\ instructions
+defer cmp.a  defer cmp.xy
+: cmp8  ( AXY u8 -- )  2dup check-C  - check-NZ.8 ; 
+: cmp16  ( CXY u16 -- )  2dup check-C  - check-NZ.16 ; 
 
 \ --- BRANCHING --- 
 cr .( Setting up branching ...) 
 
-\ Extend the sign of an 8-bit/16-bit number in a way we don't have to care about
-\ how large the cell size on the Forth machine is. Assumes that TRUE flag is
-\ some form of FFFF. MASK8/MASK16 is paranoid. 
-: signextend ( u8 -- u )  mask8 dup  80 and 0<>  8 lshift  or ; 
-: signextend.l ( u16 -- u ) mask16 dup  8000 and 0<> 10 lshift or ;
-
-\ Note BRANCH is reserved by Forth
-: takebranch ( u8 -- u16 )  next1byte signextend 1+  PC +! ;
-
+: takebranch ( -- )  next1byte signextend 1+  + ;  \ BRANCH reserved by Forth
 : branch-if-true ( f -- )  if takebranch else PC+1 then ; 
    
 
@@ -331,46 +345,37 @@ cr .( Setting up branching ...)
 cr .( Setting up stack ...)
 
 \ increase stack pointer 
-defer S++.a
-defer S++.xy
+defer S++.a  defer S++.xy
 : S++8 ( -- )  S @  1+  mask8  0100 OR  S ! ; 
 : S++16 ( -- )  S @  1+  mask16  S ! ; 
 
 \ decrease stack pointer, hardcoding 01 as MSB of pointer
-defer S--.a
-defer S--.xy
+defer S--.a  defer S--.xy
 : S--8 ( -- )  S @  1-  mask8  0100 OR  S ! ; 
 : S--16 ( -- )  S @  1-  mask16  S ! ; 
 
-\ Push stuff to stack. Note these destroy the top of the Forth stack so they
-\ require a DUP for each 65816 stack instruction. We don't want to include DUP
-\ here because we push other stuff than just A 
-defer push.a
-defer push.xy
+\ Push stuff to stack
+defer push.a  defer push.xy
 : push8 ( n8 -- )  S @  store8  S--8 ; 
-: push16 ( n16 -- ) 16>lsb/msb push8 push8 ; 
-: push24 ( n24 -- ) 24>bank/msb/lsb  rot push8  swap push8  push8 ; 
+: push16 ( n16 -- )  16>lsb/msb push8 push8 ; 
+: push24 ( n24 -- )  24>bank/msb/lsb  rot push8  swap push8  push8 ; 
 
 \ Pull stuff from stack 
-defer pull.a
-defer pull.xy
-: pull8 ( -- n8 )  S++8  S @  fetch8 ;  
+defer pull.a  defer pull.xy
+: pull8 ( -- n8 )  S++8  S @  fetch8 ; 
 : pull16 ( -- n16 )  pull8 pull8 lsb/msb>16 ; 
 : pull24 ( -- n24 )  pull8 pull8 pull8 lsb/msb/bank>24 ; 
    
-\ We need a special pull8 for A in eight bit mode because we need to protect B
-: pull8.a  ( u16 -- u16 ) mask.b pull8 or ; 
-: pull16.a  ( u16 -- u16 ) drop pull16 ; 
-
 
 \ ---- REGISTER MODE SWITCHES ----
 
 \ Switch accumulator 8<->16 bit (p. 51 in Manual)
-\ Remember A is TOS 
+\ TODO ADD MASK.A 
 : a:16  ( -- )  
-   ['] fetch16.a is fetch.a  \ note special FETCH for A
+   ['] fetch16 is fetch.a
    ['] store16 is store.a
-   ['] PC+2 is PC+fetch.a
+   ['] 16>C! is >C 
+   ['] PC+2 is PC+a
    ['] check-N.a16 is check-N.a
    ['] check-Z.a16 is check-Z.a
    ['] and16 is and.a
@@ -380,17 +385,19 @@ defer pull.xy
    ['] dec16 is dec.accu
    ['] inc16.mem is inc.mem
    ['] dec16.mem is dec.mem
-   ['] cmp16.a is cmp.a
+   ['] cmp16 is cmp.a
    ['] S++16 is S++.a
    ['] S--16 is S--.a
    ['] push16 is push.a 
-   ['] pull16.a is pull.a  \ note special PULL for A
+   ['] pull16 is pull.a
+   ['] mask16 is mask.a
    m-flag clear ; 
 
 : a:8 ( -- )  
-   ['] fetch8.a is fetch.a   \ note special FETCH for A
+   ['] fetch8 is fetch.a
    ['] store8 is store.a
-   ['] PC+1 is PC+fetch.a
+   ['] 8>C! is >C 
+   ['] PC+1 is PC+a
    ['] check-N.a8 is check-N.a
    ['] check-Z.a8 is check-Z.a
    ['] and8 is and.a
@@ -400,11 +407,12 @@ defer pull.xy
    ['] dec8 is dec.accu 
    ['] inc8.mem is inc.mem
    ['] dec8.mem is dec.mem
-   ['] cmp8.a is cmp.a
+   ['] cmp8 is cmp.a
    ['] S++8 is S++.a
    ['] S--8 is S--.a
    ['] push8 is push.a 
-   ['] pull8.a is pull.a      \ note special PULL8 for A
+   ['] pull8 is pull.a
+   ['] mask8 is mask.a
    m-flag set ;
 
 \ Switch X and Y 8<->16 bit (p. 51 in Manual) 
@@ -412,7 +420,7 @@ defer pull.xy
    ['] fetch16 is fetch.xy 
    ['] store16 is store.xy
    ['] mask16 is mask.xy
-   ['] PC+2 is PC+fetch.xy
+   ['] PC+2 is PC+xy
    ['] check-N.x16 is check-N.x
    ['] check-N.y16 is check-N.y
    ['] cmp16 is cmp.xy
@@ -427,7 +435,7 @@ defer pull.xy
    ['] fetch8 is fetch.xy
    ['] store8 is store.xy
    ['] mask8 is mask.xy
-   ['] PC+1 is PC+fetch.xy
+   ['] PC+1 is PC+xy
    ['] check-N.x8 is check-N.x
    ['] check-N.y8 is check-N.y
    ['] cmp8 is cmp.xy
@@ -462,46 +470,56 @@ defer pull.xy
 \ ---- ADDRESSING MODES --- 
 cr .( Defining addressing modes ...) 
 
-\ Note that the mnemonics for Absolute Mode have no suffix, but we use
-\ MODE.ABS for clarity. Note that not all modes are listed here, as some are
-\ easier to code by hand. Note that modes advance the PC so we don't have to
-\ include that in the operand code. Note that register manipulation must come
-\ before the mode word (eg "Y @  MODE.ABS.DBR"), not behind it 
+\ Mode words leave the correct address as TOS before the PC. Note that the
+\ mnemonics for Absolute Mode have no suffix, but we use MODE.ABS for clarity.
+\ Not all modes are listed here, because some are easier to code by hand. Nodes
+\ advance the PC so we don't have to include that in the operand code; since the
+\ PC is usually TOS, this requires some stack manipulation.  Register
+\ manipulation should come before the mode word (eg "Y @  MODE.ABS.DBR"), not
+\ behind it. 
 
 \ Absolute 
 \ We need two different versions, one for instructions that affect data and take
 \ the DBR, and one for instructions that affect programs and take the PBR
+\ TODO handle page boundries / wrapping
 : mode.abs.DBR ( -- 65addr24 )  next2bytes mem16/DBR>24 PC+2 ;
 : mode.abs.PBR ( -- 65addr24 )  next2bytes mem16/PBR>24 PC+2 ;
 
 \ Absolute Indirect 
+\ TODO handle page boundries / wrapping
 : mode.i  ( -- 65addr24)  mode.abs.PBR  fetch16  mem16/PBR>24 ;
 
 \ Absolute Long 
+\ TODO handle page boundries / wrapping
 : mode.l  ( -- 65addr24)  next3bytes PC+3 ;
 
 \ Absolute Indexed X/Y (pp. 289-290) 
 \ Assumes that X will be the correct width (8 or 16 bit)
-\ TODO handle wrapping
+\ TODO handle page boundries / wrapping
 : mode.x  ( -- 65addr24 )  mode.abs.DBR  X @  + ;
 : mode.y  ( -- 65addr24 )  mode.abs.DBR  Y @  + ;
 
 \ Absolute Long X Indexed 
 \ This assumes that X will be the correct width (8 or 16 bit) 
-\ TODO handle wrapping
+\ TODO handle page boundries / wrapping
 : mode.lx ( -- 65addr24)  mode.l  X @  + ; 
 
 \ Direct Page (pp. 94, 155, 278) 
 \ Note that D can be relocated in Emulated Mode as well, see
 \ http://forum.6502.org/viewtopic.php?f=8&t=3459&p=40389#p40370 for details
 \ TODO handle page boundries / wrapping
-: mode.d ( -- 65addr24)  next1byte  D @  +   00  mem16/bank>24  PC+1 ;
+: mode.d ( -- 65addr24)  next1byte  D @  +   00  mem16/bank>24 PC+1 ;
 
 \ Direct Page Indirect  (p. 302) 
 \ Note this uses the Data Bank Register DBR, not PBR
 \ TODO handle page boundries / wrapping
 : mode.di  ( -- 65addr24)  
-   next1byte  D @  +  0  mem16/bank>24  fetch16  DBR @  mem16/bank>24  PC+1 ;
+   next1byte  D @  +  0  mem16/bank>24  fetch16  DBR @  mem16/bank>24 PC+1 ;
+
+\ Immediate Mode 
+\ Note that this mode does not advance the PC as it is used with A and XY
+\ TODO handle page boundries / wrapping
+: mode.imm  ( -- 65addr24 )  PC24 ; 
 
 
 \ ---- OUTPUT FUNCTIONS ----
@@ -520,7 +538,8 @@ cr .( Creating output functions ...)
 \ TODO rewrite this once we know what we really want to see
 : .state ( -- )
 
-   \ Print status line 
+   \ --- Print status line --- 
+
    \  ." xxxx xx "
    cr ."  PC   K "
 
@@ -541,27 +560,27 @@ cr .( Creating output functions ...)
       ."   S    D   B NV-BDIZC" else
       ."   S    D   B NVMXDIZC" then cr 
 
-   PC @ .mask16  PBR @ .mask8   
-   
-   \ print A/B or C
-   dup 
-   m-flag set?  e-flag set?  or  if  
-      dup msb .mask8 lsb .mask8 else
-      .mask16 then
+   \ --- Print data ---
 
-   \ print XY
-   Y @  X @
-   x-flag set? if .mask8 .mask8  else  .mask16 .mask16  then 
+   PC @  .mask16  PBR @ .mask8   
    
-   S @ .mask16  D @ .mask16  DBR @ .mask8
+   \ print BA or C
+   m-flag set?  e-flag set?  or  if  
+      B .mask8  A .mask8 else
+      C @ .mask16 then
+
+   \ print X and Y
+   Y @  X @   x-flag set? if  .mask8 .mask8  else  .mask16 .mask16  then 
+   
+   S @ .mask16   D @ .mask16   DBR @ .mask8
    status-r .8bits  space 
-   e-flag set? if ." emulated" else ." native" then  cr ; 
+   e-flag set? if ." emulated" else ." native" then cr ; 
 
 \ Print stack if we are in emulated mode
 : stackempty? ( -- f )  S @  01ff  = ; 
 : .stack ( -- )
    cr  e-flag clear? if
-         ." Can't dump stack when in native mode (yet)"
+         ." Can't dump stack when in native mode"
       else
          stackempty? if  
             ." Stack is empty (S is 01FF in emulated mode)" cr  else
@@ -582,8 +601,7 @@ cr .( Creating output functions ...)
 \ ---- OPCODE ROUTINES ----
 cr .( Defining opcode routines ... ) 
 
-\ TODO change so we drop into single-step mode
-\ TODO add stack stuff
+\ TODO change BRK so we drop into single-step mode, add stack effects
 : opc-00 ( brk )   cr ." *** BRK encountered, halting CPU (ALPHA only) ***" 
    .state quit ; 
 
@@ -597,24 +615,21 @@ cr .( Defining opcode routines ... )
 : opc-07 ( ora.dil )   ." 07 not coded yet" ; 
 : opc-08 ( php )   ." 08 not coded yet" ; 
 
-: opc-09 ( ora.# )  \ DUP required because FETCH.A replaces A
-   dup PC24 fetch.a  ora.a  check-NZ.a  PC+fetch.a ; \ TODO TESTME
+: opc-09 ( ora.# )  mode.imm fetch.a ora.a check-NZ.a PC+a ;
 
 : opc-0A ( asl.a )   ." 0A not coded yet" ; 
 
-: opc-0B ( phd )  D @  mask16  push16 ;
+: opc-0B ( phd )  D @  mask16 push16 ;
 
 : opc-0C ( tsb )   ." 0C not coded yet" ; 
 
-: opc-0D ( ora )  \ DUP required because FETCH.A replaces A
-   dup mode.abs.DBR  fetch.a  ora.a  check-NZ.a ;
+: opc-0D ( ora )  mode.abs.DBR fetch.a ora.a check-NZ.a ;
 
 : opc-0E ( asl )   ." 0E not coded yet" ; 
 
-\ DUP required because FETCH.A replaces A
-: opc-0F ( ora.l )  dup mode.l  fetch.a  ora.a  check-NZ.a ;
+: opc-0F ( ora.l )  mode.l fetch.a ora.a check-NZ.a ;
 
-: opc-10 ( bpl )  n-flag clear? branch-if-true ; 
+: opc-10 ( bpl )  n-flag clear?  branch-if-true ; 
 
 : opc-11 ( ora.diy )   ." 11 not coded yet" ; 
 : opc-12 ( ora.di )   ." 12 not coded yet" ; 
@@ -626,63 +641,59 @@ cr .( Defining opcode routines ... )
 
 : opc-18 ( clc )  c-flag clear ; 
 
-: opc-19 ( ora.y )   dup mode.y fetch.a ora.a check-NZ.a ; \ TODO TEST ME
+: opc-19 ( ora.y )   mode.y fetch.a ora.a check-NZ.a ; 
 
 : opc-1A ( inc.a )   inc.accu ;
 
-: opc-1B ( tcs )  \ Does not affect flags; compare TXS
-   dup e-flag set?  if \ emulation mode, hi byte paranoided to 01
-      mask8 0100 or  else
-      mask16 then      \ native mode always copies full C to S
-      S ! ;
+\ Does not affect flags; compare TXS. In emulation mode, hi byte is paranoided
+\ to 01, native mode always copies full C to S
+: opc-1B ( tcs )  e-flag set?  if  0100 A or  else  C @  then  S ! ;
 
 : opc-1C ( trb )   ." 1C not coded yet" ; 
 
-: opc-1D ( ora.x )   dup mode.x fetch.a ora.a check-NZ.a ; \ TODO TEST ME
+: opc-1D ( ora.x )  mode.x fetch.a ora.a check-NZ.a ; 
 
 : opc-1E ( asl.x )  ." 1E not coded yet" ;  
 
-: opc-1F ( ora.lx )  dup mode.lx  fetch.a  ora.a  check-NZ.a ; \ TODO TEST ME 
+: opc-1F ( ora.lx )  mode.lx fetch.a ora.a check-NZ.a ;
 
 \ STEP already increases the PC by one, so we only need to add one byte because
 \ the address pushed is the last byte of the instruction
-: opc-20 ( jsr )  PC @  1+  push16   next2bytes PC ! ;
+: opc-20 ( jsr )  PC @ 1+  push16 next2bytes  PC ! ;
 
 : opc-21 ( and.dxi )   ." 21 not coded yet" ; 
 
-: opc-22 ( jsr.l )  PC24  2 +  push24  next3bytes 24>PC24 ;
+: opc-22 ( jsr.l )  PC24  2 +  push24 next3bytes 24>PC24! ;
 
 : opc-23 ( and.s )   ." 23 not coded yet" ; 
 : opc-24 ( bit.d )   ." 24 not coded yet" ; 
 
-\ DUP required because FETCH.A replaces A
-: opc-25 ( and.d )  dup mode.d fetch.a  and.a check-NZ.a ; 
+: opc-25 ( and.d )  mode.d fetch.a and.a check-NZ.a ; 
 
 : opc-26 ( rol.d )   ." 26 not coded yet" ; 
 : opc-27 ( and.dil )   ." 27 not coded yet" ; 
 : opc-28 ( plp )   ." 28 not coded yet" ; 
 \
-\ DUP required because FETCH.A replaces A
-: opc-29 ( and.# )  dup PC24 fetch.a  and.a  check-NZ.a  PC+fetch.a ; 
+: opc-29 ( and.# )  mode.imm fetch.a and.a check-NZ.a PC+a ; 
 
 : opc-2A ( rol )   ." 2A not coded yet" ; 
 
 \ Affects N and Z, is always 16 bit
-: opc-2B ( pld )  pull16  dup check-Z  dup check-N16  D ! ;
+: opc-2B ( pld )  pull16 dup check-Z dup check-N16  D ! ;
 
 : opc-2C ( bit )   ." 2C not coded yet" ; 
 
-: opc-2D ( and )  dup mode.abs.DBR  fetch.a  and.a  check-NZ.a ;  \ TODO TEST ME
+: opc-2D ( and )  mode.abs.DBR fetch.a and.a check-NZ.a ;
 
 : opc-2E ( rol )   ." 2E not coded yet" ; 
 
-: opc-2F ( and.l ) dup  mode.l  fetch.a  and.a  check-NZ.a ;
+: opc-2F ( and.l )  mode.l fetch.a and.a check-NZ.a ;
 
 : opc-30 ( bmi )  n-flag set? branch-if-true ; 
 
 : opc-31 ( and.diy )   ." 31 not coded yet" ; 
 
-: opc-32 ( and.di )  dup mode.di fetch.a and.a check-NZ.a ; \ TODO TEST ME
+: opc-32 ( and.di )  mode.di fetch.a and.a check-NZ.a ;
 
 : opc-33 ( and.siy )   ." 33 not coded yet" ; 
 : opc-34 ( bit.dx )   ." 34 not coded yet" ; 
@@ -692,50 +703,49 @@ cr .( Defining opcode routines ... )
 
 : opc-38 ( sec )  c-flag set ;  
 
-: opc-39 ( and.y )  dup mode.y fetch.a and.a check-NZ.a ; \ TODO TEST ME
+: opc-39 ( and.y )  mode.y fetch.a and.a check-NZ.a ;
 
 : opc-3A ( dec.a )  dec.accu ;
 
 \ Assumes N affected by 16th bit in all modes
-: opc-3B ( tsc )  drop  S @  mask16  check-NZ.a ; 
+: opc-3B ( tsc )  S @  mask16 check-NZ.a ; 
 
 : opc-3C ( bit.x )   ." 3C not coded yet" ; 
 
-: opc-3D ( and.x )   dup mode.x fetch.a and.a check-NZ.a ;
+: opc-3D ( and.x )   mode.x fetch.a and.a check-NZ.a ;
 
 : opc-3E ( rol.x )   ." 3E not coded yet" ; 
 
-: opc-3F ( and.lx )  dup mode.lx  fetch.a  and.a  check-NZ.a ; \ TODO TEST ME 
+: opc-3F ( and.lx )  mode.lx fetch.a and.a check-NZ.a ;
 
 : opc-40 ( rti )   ." 40 not coded yet" ; 
 : opc-41 ( eor.dxi )   ." 41 not coded yet" ; 
 
-: opc-42 ( wdm ) ." WARNING: WDM executed."  PC+1 ; 
+: opc-42 ( wdm ) cr cr ." WARNING: WDM executed."  PC+1 ; 
 
 : opc-43 ( eor.s )   ." 43 not coded yet" ; 
 : opc-44 ( mvp )   ." 44 not coded yet" ; 
 : opc-45 ( eor.d )   ." 45 not coded yet" ; 
 : opc-46 ( lsr.d )   ." 46 not coded yet" ; 
 : opc-47 ( eor.dil )   ." 47 not coded yet" ; 
-: opc-48 ( pha )  dup push.a ; 
+: opc-48 ( pha )  push.a ; 
 
-: opc-49 ( eor.# )  
-      dup PC24 fetch.a  eor.a  check-NZ.a  PC+fetch.a ; \ TODO TESTME
+: opc-49 ( eor.# )  mode.imm fetch.a eor.a check-NZ.a PC+a ;
 
 : opc-4A ( lsr.a )   ." 4A not coded yet" ; 
 
-: opc-4B ( phk )  PBR @  mask8  push8 ; \ Mask8 is paranoid 
+: opc-4B ( phk )  PBR @  push8 ;
 : opc-4C ( jmp )  next2bytes  PC ! ;
-: opc-4D ( eor )  dup mode.abs.DBR  fetch.a  eor.a  check-NZ.a ;  \ TODO TESTME
+: opc-4D ( eor )  mode.abs.DBR fetch.a eor.a check-NZ.a ;
 
 : opc-4E ( lsr )   ." 4E not coded yet" ; 
 
-: opc-4F ( eor.l )  dup  mode.l  fetch.a  eor.a  check-NZ.a ;
+: opc-4F ( eor.l )  mode.l fetch.a eor.a check-NZ.a ;
 : opc-50 ( bvc )  v-flag clear? branch-if-true ; 
 
 : opc-51 ( eor.diy )   ." 51 not coded yet" ; 
 
-: opc-52 ( eor.di )  dup mode.di  fetch.a eor.a check-NZ.a ; \ TODO TESTME
+: opc-52 ( eor.di )  mode.di fetch.a eor.a check-NZ.a ;
 
 : opc-53 ( eor.siy )   ." 53 not coded yet" ; 
 : opc-54 ( mvn )   ." 54 not coded yet" ; 
@@ -745,18 +755,18 @@ cr .( Defining opcode routines ... )
 
 : opc-58 ( cli )  i-flag clear ;  
 
-: opc-59 ( eor.y )  dup mode.y fetch.a eor.a check-NZ.a ; \ TODO TESTME
+: opc-59 ( eor.y )  mode.y fetch.a eor.a check-NZ.a ;
 
 : opc-5A ( phy )  Y @ push.xy ; 
-: opc-5B ( tcd )  dup  mask16  D ! check-NZ.a ;  \ mask16 is paranoid
-: opc-5C ( jmp.l )  next3bytes 24>PC24 ; 
-: opc-5D ( eor.x )  dup mode.x  fetch.a eor.a check-NZ.a ; \ TODO TESTME
+: opc-5B ( tcd )  C @  mask16 dup check-NZ.a  D ! ;
+: opc-5C ( jmp.l )  next3bytes 24>PC24! ; 
+: opc-5D ( eor.x )  mode.x fetch.a eor.a check-NZ.a ;
 
 : opc-5E ( lsr.x )  ." 5E not coded yet" ; 
 
-: opc-5F ( eor.lx )  dup mode.lx  fetch.a  eor.a  check-NZ.a ; \ TODO TEST ME
+: opc-5F ( eor.lx )  mode.lx fetch.a eor.a check-NZ.a ;
 
-: opc-60 ( rts )  pull16 1+  PC ! ;
+: opc-60 ( rts )  drop pull16 1+ ;
  
 : opc-61 ( adc.dxi )   ." 61 not coded yet" ; 
 : opc-62 ( phe.r )   ." 62 not coded yet" ; 
@@ -768,13 +778,12 @@ cr .( Defining opcode routines ... )
 : opc-66 ( ror.d )   ." 66 not coded yet" ; 
 : opc-67 ( adc.dil )   ." 67 not coded yet" ; 
 
-: opc-68 ( pla )  pull.a check-NZ.a ; 
+: opc-68 ( pla )  pull.a dup check-NZ.a fetch.a >C ; 
 
 : opc-69 ( adc.# )   ." 69 not coded yet" ; 
 : opc-6A ( ror.a )   ." 6A not coded yet" ; 
 
-: opc-6B ( rts.l )  pull24 1+  24>PC24 ; 
-
+: opc-6B ( rts.l )  pull24 1+  24>PC24! ; 
 : opc-6C ( jmp.i )  mode.i  PC ! ; 
 
 : opc-6D ( adc )   ." 6D not coded yet" ; 
@@ -796,7 +805,7 @@ cr .( Defining opcode routines ... )
 : opc-79 ( adc.y )   ." 79 not coded yet" ; 
 
 : opc-7A ( ply )  pull.xy  Y !  check-NZ.y ;
-: opc-7B ( tdc )  drop  D @  mask16  check-NZ.a ;  \ TODO TESTME, mask16 paranoid
+: opc-7B ( tdc )  D @  mask16 dup check-NZ.a >C ; 
 
 : opc-7C ( jmp.xi )   ." 7C not coded yet" ; 
 : opc-7D ( adc.x )   ." 7D not coded yet" ; 
@@ -807,12 +816,12 @@ cr .( Defining opcode routines ... )
 
 : opc-81 ( sta.dxi )   ." 81 not coded yet" ;
 
-: opc-82 ( bra.l )  next2bytes signextend.l  2 +  PC +! ; 
+: opc-82 ( bra.l )  next2bytes signextend.l  2 +  PC ! ; 
 
 : opc-83 ( sta.s )   ." 83 not coded yet" ; 
 
 : opc-84 ( sty.d )  Y @  mode.d store.xy ;
-: opc-85 ( sta.d )  dup mode.d store.a ; 
+: opc-85 ( sta.d )  A @  mode.d store.a ; 
 : opc-86 ( stx.d )  X @  mode.d store.xy ;  
 
 : opc-87 ( sta.dil )   ." 87 not coded yet" ; 
@@ -821,22 +830,18 @@ cr .( Defining opcode routines ... )
 
 : opc-89 ( bit.# )   ." 89 not coded yet" ; 
 
-: opc-8A ( txa )  \ TODO test what happens to B register
-   m-flag clear? if  
-      drop  X @  else
-      mask.b  X @  mask8 or  then 
-      check-NZ.a ; 
+: opc-8A ( txa )  X @  >C check-NZ.a ; 
 
-: opc-8B ( phb )  DBR @  mask8  push8 ; \ mask8 is paranoid 
+: opc-8B ( phb )  DBR @  push8 ; 
 : opc-8C ( sty )  Y @  mode.abs.DBR store.xy ;
-: opc-8D ( sta )  dup  mode.abs.DBR  store.a ; 
+: opc-8D ( sta )  C @  mode.abs.DBR store.a ; 
 : opc-8E ( stx )  X @  mode.abs.DBR store.xy ;
-: opc-8F ( sta.l )  dup  mode.l  store.a ; 
+: opc-8F ( sta.l )  mode.l store.a ; 
 : opc-90 ( bcc )  c-flag clear? branch-if-true ; 
 
 : opc-91 ( sta.diy )   ." 91 not coded yet" ; 
 
-: opc-92 ( sta.di )  dup mode.di  store.a ;
+: opc-92 ( sta.di )  mode.di store.a ;
 
 : opc-93 ( sta.siy )   ." 93 not coded yet" ; 
 : opc-94 ( sty.dx )   ." 94 not coded yet" ; 
@@ -844,62 +849,49 @@ cr .( Defining opcode routines ... )
 : opc-96 ( stx.dy )   ." 96 not coded yet" ; 
 : opc-97 ( sta.dily )   ." 97 not coded yet" ; 
 
-: opc-98 ( tya )  \ TODO test what happens to B register
-   m-flag clear? if  
-      drop  Y @  else
-      mask.b  Y @  mask8 or  then 
-      check-NZ.a ; 
+: opc-98 ( tya )  Y @  >C check-NZ.a ; 
 
 : opc-99 ( sta.y )   ." 99 not coded yet" ; 
 
 \ Does not alter flags; compare TCS 
 : opc-9A ( txs ) 
-   X @
-   e-flag set? if    \ emulation mode, hi byte paranoided to 01
+   X @  e-flag set? if  \ emulation mode, hi byte paranoided to 01
       mask8  0100 or else
-         x-flag set? if mask8 then  \ native mode, 8 bit X; hi byte is 00
-   then 
-   S ! ; 
+      x-flag set? if mask8 then  \ native mode, 8 bit X; hi byte is 00
+   then  S ! ; 
             
 : opc-9B ( txy )  X @  Y !  check-NZ.y ;
-: opc-9C ( stz )  0  mode.abs.DBR store.a ; 
-: opc-9D ( sta.x )   dup mode.x  store.a ; 
-: opc-9E ( stz.x ) 0 mode.x  store.a ;
-
-: opc-9F ( sta.lx )  dup  mode.lx  store.a ;
-
-\ We need PC+fetch.xy for PC because no MODE.* used
-: opc-A0 ( ldy.# )  PC24 fetch.xy  Y !  check-NZ.y  PC+fetch.xy ;
+: opc-9C ( stz )  0 mode.abs.DBR store.a ; 
+: opc-9D ( sta.x )  mode.x store.a ; 
+: opc-9E ( stz.x )  0 mode.x store.a ;
+: opc-9F ( sta.lx )  mode.lx store.a ;
+: opc-A0 ( ldy.# )  mode.imm fetch.xy  Y !  check-NZ.y PC+xy ;
 
 : opc-A1 ( lda.dxi )   ." A1 not coded yet" ; 
 
-\ We need PC+fetch.xy for PC because no MODE.* used
-: opc-A2 ( ldx.# )  PC24 fetch.xy  X !  check-NZ.x  PC+fetch.xy ;
+: opc-A2 ( ldx.# )  mode.imm fetch.xy  X !  check-NZ.x PC+xy ;
 
 : opc-A3 ( lda.s )   ." A3 not coded yet" ; 
 
 : opc-A4 ( ldy.d )  mode.d fetch.xy  Y !  check-NZ.y ; 
-: opc-A5 ( lda.d )  mode.d fetch.a check-NZ.a ; 
+: opc-A5 ( lda.d )  mode.d fetch.a >C check-NZ.a ; 
 : opc-A6 ( ldx.d )  mode.d fetch.xy  X !  check-NZ.x ; 
 
 : opc-A7 ( lda.dil )   ." A7 not coded yet" ; 
 
-: opc-A8 ( tay )  dup x-flag set? if mask8 else mask16 then  Y !  check-NZ.y ; 
-
-\ We need PC+fetch.a for PC because no MODE.* used
-: opc-A9 ( lda.# ) PC24 fetch.a  check-NZ.a  PC+fetch.a ; 
-
-: opc-AA ( tax )  dup x-flag set? if mask8 else mask16 then  X !  check-NZ.x ; 
-: opc-AB ( plb )  pull8  dup check-Z dup check-N8  DBR ! ;
-: opc-AC ( ldy )  mode.abs.DBR  fetch.xy  Y !  check-NZ.y ;
-: opc-AD ( lda )  mode.abs.DBR  fetch.a  check-NZ.a ;
-: opc-AE ( ldx )  mode.abs.DBR  fetch.xy  X !  check-NZ.x ;
-: opc-AF ( lda.l ) mode.l  fetch.a  check-NZ.a PC+fetch.a ; 
+: opc-A8 ( tay )  C @  mask.xy  Y !  check-NZ.y ; 
+: opc-A9 ( lda.# ) mode.imm fetch.a >C check-NZ.a PC+a ; 
+: opc-AA ( tax )  C @  mask.xy  X !  check-NZ.x ; 
+: opc-AB ( plb )  pull8 dup check-NZ.8 DBR ! ; \ CHECK-NZ.8 consumes TOS
+: opc-AC ( ldy )  mode.abs.DBR fetch.xy  Y !  check-NZ.y ;
+: opc-AD ( lda )  mode.abs.DBR fetch.a >C check-NZ.a ;
+: opc-AE ( ldx )  mode.abs.DBR fetch.xy  X !  check-NZ.x ;
+: opc-AF ( lda.l ) mode.l fetch.a check-NZ.a ; 
 : opc-B0 ( bcs )  c-flag set? branch-if-true ;  
 
 : opc-B1 ( lda.diy )   ." B1 not coded yet" ; 
 
-: opc-B2 ( lda.di )  mode.di  fetch.a  check-NZ.a ; 
+: opc-B2 ( lda.di )  mode.di fetch.a check-NZ.a ; 
 
 : opc-B3 ( lda.siy )   ." B3 not coded yet" ; 
 : opc-B4 ( ldy.dx )   ." B4 not coded yet" ; 
@@ -909,15 +901,13 @@ cr .( Defining opcode routines ... )
 
 : opc-B8 ( clv ) v-flag clear ; 
 
-: opc-B9 ( lda.y )   mode.x  fetch.a  check-NZ.a ; \ TODO TESTME
+: opc-B9 ( lda.y )  mode.y fetch.a check-NZ.a ;
 : opc-BA ( tsx )  S @  x-flag set? if mask8 then  X !  check-NZ.x ;  
 : opc-BB ( tyx )  Y @  X !  check-NZ.x ;
-: opc-BC ( ldy.x )  mode.x  fetch.xy  Y !  check-NZ.y ;
-: opc-BD ( lda.x )  mode.x  fetch.a  check-NZ.a ;
-
-: opc-BE ( ldx.y )   mode.y fetch.xy  X !  check-NZ.y ; \ TODO TESTME
-
-: opc-BF ( lda.lx )  mode.lx  fetch.a check-NZ.a ;
+: opc-BC ( ldy.x )  mode.x fetch.xy  Y !  check-NZ.y ;
+: opc-BD ( lda.x )  mode.x fetch.a >C check-NZ.a ;
+: opc-BE ( ldx.y )  mode.y fetch.xy  X !  check-NZ.y ; 
+: opc-BF ( lda.lx )  mode.lx fetch.a >C check-NZ.a ;
 
 : opc-C0 ( cpy.# )   ." C0 not coded yet" ; 
 : opc-C1 ( cmp.dxi )   ." C1 not coded yet" ; 
@@ -926,7 +916,7 @@ cr .( Defining opcode routines ... )
    cr ." WARNING: REP is incomplete, works only on m and x flags" cr
    next1byte 
    dup  20 = if a:16 else 
-   dup  10 = if xy:16  else 
+   dup  10 = if xy:16 else 
    dup  30 = if a:16 xy:16 then then then drop 
    PC+1 ; 
 
@@ -939,11 +929,7 @@ cr .( Defining opcode routines ... )
 : opc-C7 ( cmp.dil )   ." C7 not coded yet" ; 
 
 : opc-C8 ( iny )  Y @  1+  mask.xy  Y !  check-NZ.y ;
-
-\ Double DUP because fetch.a assumes we want to replace A and CMP doesn't touch
-\ the registers
-: opc-C9 ( cmp.# )  dup dup PC24 fetch.a mask.a cmp.a PC+fetch.a ; 
-
+: opc-C9 ( cmp.# )  mode.imm fetch.a mask.a cmp.a PC+a ; 
 : opc-CA ( dex )  X @  1- mask.xy  X !  check-NZ.x ;
 
 : opc-CB ( wai ) \ TODO crude testing version, complete this for i-flag
@@ -951,7 +937,6 @@ cr .( Defining opcode routines ... )
    cr ." WARNING: WAI not fully implemented" ; 
 
 : opc-CC ( cpy )   ." CC not coded yet" ; 
-
 : opc-CD ( cmp )  ." CD not coded yet" ; 
 
 : opc-CE ( dec )  mode.abs.DBR dec.mem ;
@@ -998,24 +983,24 @@ cr .( Defining opcode routines ... )
 : opc-E4 ( cpx.d )   ." E4 not coded yet" ; 
 : opc-E5 ( sbc.d )   ." E5 not coded yet" ; 
 
-: opc-E6 ( inc.d )   mode.d inc.mem ; 
+: opc-E6 ( inc.d )  mode.d inc.mem ; 
 
 : opc-E7 ( sbc.dil )   ." E7 not coded yet" ; 
 
 : opc-E8 ( inx )  X @  1+  mask.xy  X !  check-NZ.x ;
 
 : opc-E9 ( sbc.# )   ." E9 not coded yet" ; 
-: opc-EA ( nop ) ;
 
-\ N and Z depend only on value in A, regardless if the register is in 8 or 
+: opc-EA ( nop ) ;
+\ N and Z depend only on value in (new) A, regardless if the register is in 8 or 
 \ 16 bit mode 
 : opc-EB ( xba )  
-   dup msb swap  lsb 8 lshift  or  check-N.a8 check-Z.a8 ;
+   C @ dup  mask8  8 lshift  swap mask.b  8 rshift  dup check-NZ.8  or  C ! ; 
 
 : opc-EC ( cpx )   ." EC not coded yet" ; 
 : opc-ED ( sbc )   ." ED not coded yet" ; 
 
-: opc-EE ( inc )   mode.abs.DBR inc.mem ; \ Does not affect carry or decimal flag ; 
+: opc-EE ( inc )  mode.abs.DBR inc.mem ; 
 
 : opc-EF ( sbc.l )   ." EF not coded yet" ; 
 
@@ -1025,7 +1010,7 @@ cr .( Defining opcode routines ... )
 : opc-F2 ( sbc.di )   ." F2 not coded yet" ; 
 : opc-F3 ( sbc.siy )   ." F3 not coded yet" ; 
 
-: opc-F4 ( phe.# )  next2bytes push16 PC+2 ; \ Does not affect flags
+: opc-F4 ( phe.# )  next2bytes push16 PC+2 ;
 
 : opc-F5 ( sbc.dx )   ." F5 not coded yet" ; 
 : opc-F6 ( inc.dx )   ." F6 not coded yet" ; 
@@ -1037,7 +1022,7 @@ cr .( Defining opcode routines ... )
 
 : opc-FA ( plx )  pull.xy  X !  check-NZ.x ; 
 
-: opc-FB ( xce )  e-flag @  c-flag @  swap  c-flag !  dup e-flag !
+: opc-FB ( xce )  c-flag @  e-flag @   c-flag !  dup e-flag !
    if emulated else native then ; 
 
 : opc-FC ( jsr.xi )   ." FC not coded yet" ; 
@@ -1080,18 +1065,18 @@ cr .( Setting up interrupts ...)
 
 : poweron ( -- ) \ TODO not used yet
    0000 D !  \ intiate Direct Page to zero (p. 155)
-   \ TODO add rest
+   \ TODO add everything else
    ; 
 
 : reset-i ( -- )  \ p.201
    emulated
-   00  \ TOS is A
    \ TODO Set flags
-   00 X !   00 Y !  00 PBR !  00 DBR !  0000 D ! 
-   reset-v fetch16  PC ! 
-   \ RESET and power on set the MSB of the S to $01 but don't put the LSB
-   \ in a defined state (http://forum.6502.org/viewtopic.php?f=4&t=2258) 
-   S @  mask8  0100 OR  S ! ; \ TODO check if we keep LSB
+   00 C !  00 X !   00 Y !  00 PBR !  00 DBR !  0000 D ! 
+   reset-v fetch16  PC !  \ PC16 is TOS 
+   \ RESET and power on set the MSB of the S to $01 but don't put the LSB in
+   \ a defined state (http://forum.6502.org/viewtopic.php?f=4&t=2258) We use
+   \ a weird but famous number for the initial value to make this clear
+   S @  mask8  012a OR  S ! ;
 
 : irq-i ( -- ) ." IRQ routine not programmed yet" ; \ TODO 
 : nmi-i ( -- ) ." NMI routine not programmed yet" ; \ TODO 
@@ -1107,15 +1092,14 @@ cr .( Setting up interrupts ...)
 
 \ Increase PC before executing instruction so we are pointing at the
 \ operand (if available)
-: step ( -- )  opc-jumptable next1byte cells +  @    PC+1   execute ; 
-: run ( -- )   begin step again ; 
+: step ( -- )  opc-jumptable next1byte cells +  @  PC+1 execute ; 
+: run ( -- )  begin step again ; 
 
 
 \ ---- START EMULATION ----
 cr .( All done.) cr 
 
-\ Note that we currently cheat here using RESET as the situation after boot,
-\ which is not technically correct
+\ TODO replace RESET-I with POWERON 
 reset-i 
 .state 
 

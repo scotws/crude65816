@@ -1,7 +1,7 @@
 Manual for A Crude 65816 Emulator 
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 09. Jan 2015
-This version: 17. Sep 2015
+This version: 21. Sep 2015
 
 
 THIS DOCUMENT IS CURRENTLY MERELY A COLLECTION OF NOTES. WHEN IN DOUBT, USE THE SOURCE CODE. 
@@ -128,6 +128,10 @@ The Crude Emulator internally uses an assembler variant called "Typist's Assembl
     stack rel ind y indexed   lda (3,S),y          3 lda.siy  (65816)
     block move                mvp 0,0            0 0 mvp      (65816) 
 
+
+NOTES ON INTERNAL CONSTRUCTION
+
+The Crude Emulator keeps all values in variables. Experiments with first A as the top of the Forth stack (TOS) and then PC worked, but make working with it as a debugging tool more difficult: You either had to reload A or PC by hand after every crash. The Forth stack should be empty after every successful instruction.
 
 
 OTHER NOTES

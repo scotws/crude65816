@@ -1,6 +1,6 @@
 Changelog for A Crude Emulator for the 65816 in Forth 
 Scot W. Stevenson <scot.stevenson@gmail.com>
 
-Add new entries to the top
+Add new entries to the top, major changes only
 
 26. May 2015 - PRE-ALPHA uploaded to Github

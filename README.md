@@ -4,7 +4,7 @@ Scot W. Stevenson <scot.stevenson@gmail.com>
 
 First version: 08. Jan 2015
 
-This version: 09. Sep 2015
+This version: 20. Sep 2015
 
 
 ### TL;DR

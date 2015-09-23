@@ -136,7 +136,7 @@ The Crude Emulator keeps all values in variables. Experiments with first A as th
 
 THE CRUDETEST TESTING SUITE 
 
-The emulator includes a crude testing suite that can be use for regression testing. The program is named CRUDETEST.FS. To invoke it, start Gforth and INCLUDE CRUDE65816.FS with any binary source code. Then, INCLUDE CRUDETEST.FS. The program will print a matrix of the correct machine instructions and abort at the first error encountered. Befitting a crude emulator, the tests themselves are rather crude as well, so it would be wrong to place too much faith in them, but they are better than nothing.
+The emulator includes a crude testing suite that can be use for regression testing. The program is named CRUDETEST.FS. To invoke it, start Gforth and INCLUDE CRUDE65816.FS with any binary source code. Then, INCLUDE TOOLS/CRUDETEST.FS. The program will print a matrix of the correct machine instructions and abort at the first error encountered. Befitting a crude emulator, the tests themselves are rather crude as well, so it would be wrong to place too much faith in them, but they are better than nothing.
 
 (FEHLT Emulated mode can be tested with external tests)
 

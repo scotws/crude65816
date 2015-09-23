@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 21. Sep 2015 
+\ This version: 23. Sep 2015 
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -41,7 +41,6 @@ variable C     \ C register (16 bit); MSB is B, LSB is A
 variable X     \ X register (8\16 bit)
 variable Y     \ Y register (8\16 bit)
 variable D     \ Direct register (Zero Page on 6502) (16 bit) 
-variable P     \ Processor Status Register (8 bit)
 variable S     \ Stack Pointer (8/16 bit)
 variable DBR   \ Data Bank register ("B") (8 bit)
 variable PBR   \ Program Bank register ("K") (8 bit)
@@ -207,12 +206,11 @@ variable e-flag
 : set  ( addr -- )  true swap ! ; 
 : clear  ( addr -- )  false swap ! ; 
 
-\ Status Byte 
-defer status-r
+\ Status byte 
+defer P 
 
 \ emulation mode 
-\ TODO change -R8 to -E and -R16 to -N 
-: status-r8  ( -- u8 ) 
+: P.e  ( -- u8 ) 
 n-flag @  80 and 
 v-flag @  40 and +
 \   bit 5 is empty TODO see if this needs to be set to zero 
@@ -223,7 +221,7 @@ z-flag @  02 and +
 c-flag @  01 and + ; 
 
 \ native mode
-: status-r16  ( -- u8 ) 
+: P.n  ( -- u8 ) 
 n-flag @  80 and 
 v-flag @  40 and +
 m-flag @  20 and +
@@ -450,13 +448,13 @@ defer pull.a  defer pull.xy
 \ verb for "native" like "emulate", so we're "going" 
 : native ( -- )  
    e-flag clear
-   ['] status-r16 is status-r 
+   ['] P.n is P 
    \ TODO set direct page to 16 zero page
    ; 
 
 : emulated ( -- )  \ p. 45
    e-flag set   
-   ['] status-r8 is status-r 
+   ['] P.e is P 
    \ We explicitly change the status flags M and X eben though we don't see them
    \ because we use them internally to figure out the size of the registers
    a:8   xy:8  
@@ -573,7 +571,7 @@ cr .( Creating output functions ...)
    Y @  X @   x-flag set? if  .mask8 .mask8  else  .mask16 .mask16  then 
    
    S @ .mask16   D @ .mask16   DBR @ .mask8
-   status-r .8bits  space 
+   P .8bits  space 
    e-flag set? if ." emulated" else ." native" then cr ; 
 
 \ Print stack if we are in emulated mode

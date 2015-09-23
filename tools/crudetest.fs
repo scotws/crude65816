@@ -50,7 +50,8 @@ s" (No message yet)" .t-message
 \ ==== TEST ROUTINES ==== 
 
 : t-result ( u8 f -- )  
-   if dup .t-entry else s" INSTRUCTION FAILED: " .t-message . quit then ; 
+   if dup .t-entry else s" INSTRUCTION FAILED: " .t-message . quit then 
+   drop ; 
 
 \ Start tests at 1000
 : t-reset-PC  1000 PC !  s" (Intializing PC to 1000)" .t-info ; 
@@ -73,7 +74,7 @@ true t-result        \ nothing crashed, so we're happy
 042  s" Testing NOP" .t-info 
 t-reset-PC
 0042 1000 store16    \ 42 00 
-opc-42
+step
 true t-result        \ nothing crashed, so we're happy
 
 
@@ -186,6 +187,24 @@ opc-FB   \ XCE swap carry/emulation
 t-result
 opc-FB   \ switch back to emulation mode for further testing
 
+
+\ ---- ADDRESSING MODE TESTS ----
+
+\ HIER HIER 
+
+\ ---- LOAD AND STORE INSTRUCTIONS ----
+
+\ TEST: LDA IMMEDIATE  TODO check 16 bit
+\ TODO replace this by mode tests
+0A9 s" Testing LDA.#" .t-info 
+t-reset-PC
+00A9 1000 store16    \ A9 00 
+0ff C !  step
+   z-flag set?
+   n-flag clear? and 
+   A 0= and
+   B 0= and
+t-result 
 
 
 \ ==== SUCCESSFULLY COMPLETED ====

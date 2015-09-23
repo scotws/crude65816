@@ -4,9 +4,11 @@
 \ This version: 23. Sep 2015
 
 \ Use this test suite by starting Gforth normally and then first including first
-\ the emulator and then this file
-
-\ Prefix words in this program with t- to avoid conflict with emulator
+\ the emulator and then this file. Prefix words in this program with t- to avoid
+\ conflict with emulator. Note a lot of these could easily be combined into
+\ smaller Forth structures, but we're leaving them the way they are for the
+\ moment to focus on other parts of the project. At some point, these should be
+\ rewritten.
 
 cr .( Loading test suite ...) 
 hex 
@@ -51,7 +53,7 @@ s" (No message yet)" .t-message
    if dup .t-entry else s" INSTRUCTION FAILED: " .t-message . quit then ; 
 
 \ Start tests at 1000
-1000 PC !  s" (Intializing PC to 1000)" .t-info 
+: t-reset-PC  1000 PC !  s" (Intializing PC to 1000)" .t-info ; 
 
 \ We start with the simple instructions and work our way up to the more complex
 \ ones instead of going systematically. So we start with NOP. 
@@ -59,13 +61,23 @@ s" (No message yet)" .t-message
 
 \ ==== OPCODES ====
 
+
+\ ---- No Operation Codes ----
+
 \ TEST: NOP
 0EA  s" Testing NOP" .t-info 
-PC @  opc-ea  PC+1  PC @  swap -
-1 = 
-t-result 
+opc-ea
+true t-result        \ nothing crashed, so we're happy
 
-\ ---- SINGLE-BYTE INC INSTRUCTIONS ----
+\ TEST: WDM 
+042  s" Testing NOP" .t-info 
+t-reset-PC
+0042 1000 store16    \ 42 00 
+opc-42
+true t-result        \ nothing crashed, so we're happy
+
+
+\ ---- SINGLE-BYTE INC/DEC INSTRUCTIONS ----
 
 \ TEST: INX   TODO Check 16 bit
 0E8  s" Testing INX" .t-info 
@@ -116,7 +128,6 @@ t-result
 t-result 
 
 
-
 \ ---- FLAG INSTRUCTIONS ---- 
 
 \ TEST: CLC
@@ -131,7 +142,7 @@ opc-d8
    d-flag clear? 
 t-result 
 
-\ TEST: CLD
+\ TEST: CLI
 058  s" Testing CLI" .t-info 
 opc-58
    i-flag clear? 
@@ -142,6 +153,38 @@ t-result
 opc-b8
    v-flag clear? 
 t-result 
+
+\ TEST: SEC
+038  s" Testing SEC" .t-info 
+opc-38
+   c-flag set? 
+t-result 
+
+\ TEST: SED
+0f8  s" Testing SED" .t-info 
+opc-f8
+   c-flag set? 
+t-result 
+
+\ TEST: SED
+078  s" Testing SEI" .t-info 
+opc-78
+   c-flag set? 
+t-result 
+
+
+\ ---- SWITCH VARIOUS MODES ----
+
+\ TEST: XCE  TODO check all the register sizes
+\ This assumes working SEC/CLC flags, and that we are in emulation mode
+\ (e-flag is set)
+0FB s" Testing XCE" .t-info 
+opc-18   \ CLC 
+opc-FB   \ XCE swap carry/emulation
+   c-flag set?
+   e-flag clear? and 
+t-result
+opc-FB   \ switch back to emulation mode for further testing
 
 
 

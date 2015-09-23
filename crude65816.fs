@@ -83,6 +83,11 @@ defer >C
 : 8>C! ( u8 -- )  mask8  B  8 lshift  or   C ! ; 
 : 16>C! ( u16 -- ) mask16  C ! ; 
 
+\ Takes C and puts it TOS depending on the size of the accumulator
+defer C>
+: C>8 ( -- u8 ) A ; 
+: C>16 ( -- u16 ) C @  mask16 ; \ MASK is paranoid 
+
 \ 16 bit addresses and endian conversion
 : 16>lsb/msb  ( u16 -- lsb msb )  dup lsb swap msb ; 
 : lsb/msb>16  ( lsb msb -- u16 )  8 lshift or ; 
@@ -191,45 +196,38 @@ defer store.a   defer store.xy
 
 
 \ ---- FLAGS ----
-
-\ All flags are fully formed Forth flags (one cell large) 
 cr .( Setting up flag routines ... ) 
-
-variable n-flag   variable v-flag   variable m-flag
-variable x-flag   variable b-flag   variable d-flag 
-variable i-flag   variable z-flag   variable c-flag 
-variable e-flag 
-
-\ make flag code easier for humans to work with 
+\
+\ make flag routines easier for humans to work with 
 : set?  ( addr -- f )  @ ;  
 : clear?  ( addr -- f )  @ invert ;
 : set  ( addr -- )  true swap ! ; 
 : clear  ( addr -- )  false swap ! ; 
 
-\ Status byte 
-defer P 
+\ All 65816 are fully-formed Forth flags, that is, one cell wide.  There is no
+\ flag in bit 5 in emulation mode
+create flags
+   false , false , false , false , false , false , false , false , 
 
-\ emulation mode 
-: P.e  ( -- u8 ) 
-n-flag @  80 and 
-v-flag @  40 and +
-\   bit 5 is empty TODO see if this needs to be set to zero 
-b-flag @  10 and +
-d-flag @  08 and +
-i-flag @  04 and +
-z-flag @  02 and +
-c-flag @  01 and + ; 
+\ We start with n-flag, not c-flag, as first entry in the table to make
+\ creating P with loops easier
+: n-flag ( -- addr ) flags ;           \ bit 7 
+: v-flag ( -- addr ) flags cell + ;    \ bit 6 
+: m-flag ( -- addr ) flags 2 cells + ; \ bit 5 in native mode 
+: x-flag ( -- addr ) flags 3 cells + ; \ bit 4 in native mode 
+: b-flag ( -- addr ) flags 3 cells + ; \ bit 4 in emulated mode 
+: d-flag ( -- addr ) flags 4 cells + ; \ bit 3 
+: i-flag ( -- addr ) flags 5 cells + ; \ bit 2 
+: z-flag ( -- addr ) flags 6 cells + ; \ bit 1 
+: c-flag ( -- addr ) flags 7 cells + ; \ bit 0 
 
-\ native mode
-: P.n  ( -- u8 ) 
-n-flag @  80 and 
-v-flag @  40 and +
-m-flag @  20 and +
-x-flag @  10 and +
-d-flag @  08 and +
-i-flag @  04 and +
-z-flag @  02 and +
-c-flag @  01 and + ; 
+\ And then there's this guy: Emulation flag is not part of the status byte
+variable e-flag
+
+\ We don't use bit 5 in emulation mode, but it looks weird if it is set when we
+\ switch from 16-bit A in native to emulation mode, so we take care of it
+\ TODO see what actually happens during these switches
+: unused-flag ( -- addr ) flags 2 cells + ; 
 
 
 \ ---- TEST AND SET FLAGS ----
@@ -337,7 +335,7 @@ cr .( Setting up branching ...)
 
 : takebranch ( -- )  next1byte signextend 1+  + ;  \ BRANCH reserved by Forth
 : branch-if-true ( f -- )  if takebranch else PC+1 then ; 
-   
+
 
 \ --- STACK STUFF ----
 cr .( Setting up stack ...)
@@ -367,12 +365,18 @@ defer pull.a  defer pull.xy
 
 \ ---- REGISTER MODE SWITCHES ----
 
+\ We use two internal flags to remember the width of the registers. Don't use
+\ the x and m flags directly because this can screw up the status byte P 
+variable a16flag   a16flag clear 
+variable xy16flag  xy16flag clear 
+
 \ Switch accumulator 8<->16 bit (p. 51 in Manual)
 \ TODO ADD MASK.A 
 : a:16  ( -- )  
    ['] fetch16 is fetch.a
    ['] store16 is store.a
    ['] 16>C! is >C 
+   ['] C>16 is C>
    ['] PC+2 is PC+a
    ['] check-N.a16 is check-N.a
    ['] check-Z.a16 is check-Z.a
@@ -389,12 +393,13 @@ defer pull.a  defer pull.xy
    ['] push16 is push.a 
    ['] pull16 is pull.a
    ['] mask16 is mask.a
-   m-flag clear ; 
+   a16flag set ; 
 
 : a:8 ( -- )  
    ['] fetch8 is fetch.a
    ['] store8 is store.a
    ['] 8>C! is >C 
+   ['] C>8 is C>
    ['] PC+1 is PC+a
    ['] check-N.a8 is check-N.a
    ['] check-Z.a8 is check-Z.a
@@ -411,7 +416,7 @@ defer pull.a  defer pull.xy
    ['] push8 is push.a 
    ['] pull8 is pull.a
    ['] mask8 is mask.a
-   m-flag set ;
+   a16flag clear ;
 
 \ Switch X and Y 8<->16 bit (p. 51 in Manual) 
 : xy:16  ( -- )  
@@ -427,7 +432,7 @@ defer pull.a  defer pull.xy
    ['] push16 is push.xy 
    ['] pull16 is pull.xy
    X @  00FF AND  X !   Y @  00FF AND  Y !  \ paranoid
-   x-flag clear ; 
+   xy16flag set ; 
 
 : xy:8 ( -- )  
    ['] fetch8 is fetch.xy
@@ -442,27 +447,71 @@ defer pull.a  defer pull.xy
    ['] push8 is push.xy 
    ['] pull8 is pull.xy
    X @  00FF AND  X !   Y @  00FF AND  Y !  
-   x-flag set ; 
+   xy16flag clear ; 
 
 \ switch processor modes (native/emulated). There doesn't seem to be a good
 \ verb for "native" like "emulate", so we're "going" 
 : native ( -- )  
    e-flag clear
-   ['] P.n is P 
+   m-flag set
+   x-flag set
    \ TODO set direct page to 16 zero page
    ; 
 
 : emulated ( -- )  \ p. 45
    e-flag set   
-   ['] P.e is P 
-   \ We explicitly change the status flags M and X eben though we don't see them
-   \ because we use them internally to figure out the size of the registers
-   a:8   xy:8  
+   b-flag clear      \ TODO Make sure this is really what happens
+   unused-flag clear \ Make sure unused status bit 5 is not set 
+   a:8   xy:8
    S @  00FF AND  0100 OR  S ! \ stack pointer to 0100
    0000 D !  \ direct page register initialized to zero 
-   \ TODO clear b-flag ?
+   
+   \ TODO Do what with status bit 5 ? 
    \ TODO PBR and DBR ?
    ; 
+
+\ --- STATUS BYTE --- 
+\ These routines have to come after mode switches for the registers 
+
+\ Create status byte out of flag array. We don't care if we are in emulation or
+\ native mode
+: P ( -- u8 ) 
+   00                      \ initialize P byte 
+   8 0 ?do                 
+      1 lshift             \ next bit; note first shift is a dummy 
+      flags i cells +  @   \ loop thru flag table, from high bit to low
+      1 and  +             \ get last bit of Forth flag
+   loop ;
+
+\ Create new flag array based on status byte. Used mainly for PLP instruction
+\ TODO rewrite this once we know it works and REP and SEP are complete
+
+\ In emulated mode, bit 5 is always zero 
+\ TODO check hardware to see if this is true 
+\ TODO see if we can use same routine for REP and SEP
+: clear-unused ( -- ) e-flag set? if unused-flag clear then ; 
+
+\ In native mode, changing m and x flags might change the size of these
+\ registers 
+\ TODO see if we can use same routine for REP and SEP
+: flag-modeswitch ( -- ) 
+   e-flag clear? if
+      m-flag set? if a:8  a16flag clear  else
+                     a:16  a16flag set  then 
+      x-flag set? if xy:8  xy16flag clear  else
+                     xy:16  xy16flag set  then 
+   then ;  
+
+: >P ( u8 -- ) 
+   0 7 ?do
+      dup 1 and                  \ get lowest bit 
+      0= if false else true then \ convert to Forth flag
+      flags i cells +  !         \ store in flag array
+      1 rshift
+   -1 +loop 
+
+   clear-unused
+   flag-modeswitch ; 
 
 
 \ ---- ADDRESSING MODES --- 
@@ -541,13 +590,13 @@ cr .( Creating output functions ...)
    \  ." xxxx xx "
    cr ."  PC   K "
 
-   m-flag set?  e-flag set?  or  if 
+   a16flag clear?  e-flag set?  or  if 
    \  ." xx xx "
       ."  B  A " else
    \  ." xxxx "
       ."   C  " then 
    
-   x-flag set?  e-flag set?  or  if 
+   xy16flag clear?  e-flag set?  or  if 
    \  ." xx xx "
       ."  X  Y " else
    \  ." xxxx xxxx "
@@ -563,12 +612,12 @@ cr .( Creating output functions ...)
    PC @  .mask16  PBR @ .mask8   
    
    \ print BA or C
-   m-flag set?  e-flag set?  or  if  
+   a16flag clear?  e-flag set?  or  if  
       B .mask8  A .mask8 else
       C @ .mask16 then
 
    \ print X and Y
-   Y @  X @   x-flag set? if  .mask8 .mask8  else  .mask16 .mask16  then 
+   Y @  X @   xy16flag clear? if  .mask8 .mask8  else  .mask16 .mask16  then 
    
    S @ .mask16   D @ .mask16   DBR @ .mask8
    P .8bits  space 
@@ -670,8 +719,8 @@ cr .( Defining opcode routines ... )
 
 : opc-26 ( rol.d )   ." 26 not coded yet" ; 
 : opc-27 ( and.dil )   ." 27 not coded yet" ; 
-: opc-28 ( plp )   ." 28 not coded yet" ; 
-\
+
+: opc-28 ( plp )  pull8 >P ; 
 : opc-29 ( and.# )  mode.imm fetch.a and.a check-NZ.a PC+a ; 
 
 : opc-2A ( rol )   ." 2A not coded yet" ; 
@@ -726,7 +775,7 @@ cr .( Defining opcode routines ... )
 : opc-45 ( eor.d )   ." 45 not coded yet" ; 
 : opc-46 ( lsr.d )   ." 46 not coded yet" ; 
 : opc-47 ( eor.dil )   ." 47 not coded yet" ; 
-: opc-48 ( pha )  push.a ; 
+: opc-48 ( pha )  C> push.a ; 
 
 : opc-49 ( eor.# )  mode.imm fetch.a eor.a check-NZ.a PC+a ;
 
@@ -900,7 +949,7 @@ cr .( Defining opcode routines ... )
 : opc-B8 ( clv ) v-flag clear ; 
 
 : opc-B9 ( lda.y )  mode.y fetch.a check-NZ.a ;
-: opc-BA ( tsx )  S @  x-flag set? if mask8 then  X !  check-NZ.x ;  
+: opc-BA ( tsx )  S @  xy16flag clear? if mask8 then  X !  check-NZ.x ;  
 : opc-BB ( tyx )  Y @  X !  check-NZ.x ;
 : opc-BC ( ldy.x )  mode.x fetch.xy  Y !  check-NZ.y ;
 : opc-BD ( lda.x )  mode.x fetch.a >C check-NZ.a ;
@@ -913,9 +962,9 @@ cr .( Defining opcode routines ... )
 : opc-C2 ( rep ) \ TODO crude testing version, complete this for all flags
    cr ." WARNING: REP is incomplete, works only on m and x flags" cr
    next1byte 
-   dup  20 = if a:16 else 
-   dup  10 = if xy:16 else 
-   dup  30 = if a:16 xy:16 then then then drop 
+   dup  20 = if a:16 m-flag clear else 
+   dup  10 = if xy:16 x-flag clear else 
+   dup  30 = if a:16 xy:16  x-flag clear  m-flag clear  then then then drop 
    PC+1 ; 
 
 : opc-C3 ( cmp.s )   ." C3 not coded yet" ; 
@@ -972,9 +1021,9 @@ cr .( Defining opcode routines ... )
 : opc-E2 ( sep ) \ TODO crude testing version, complete this for all flags
    cr ." WARNING: SEP is incomplete, works only on m and x flags" cr
    next1byte 
-   dup  20 = if a:8 else 
-   dup  10 = if xy:8  else 
-   dup  30 = if a:8 xy:8 then then then drop 
+   dup  20 = if a:8  a16flag set  else 
+   dup  10 = if xy:8  xy16flag set  else 
+   dup  30 = if a:8 xy:8  a16flag set  xy16flag set  then then then drop 
    PC+1 ; 
 
 : opc-E3 ( sbc.s )   ." E3 not coded yet" ; 

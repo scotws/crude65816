@@ -1,7 +1,7 @@
 TODO for A Crude 65816 Emulator
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 27. May 2015
-This version: 20. Sep 2015
+This version: 24. Sep 2015
 
 IMMEDIATELY 
 
@@ -26,7 +26,11 @@ NICE TO HAVE
 
 QUESTIONS 
 
-(Too many to list)
+- In emulated mode, can REP, PLP, and SEP change the B flag and the unused flag (bit 5) of the status byte (P)?
+
+- If B is clear in emulation mode and we push P to the stack, and then switch to native mode, and then pull P again, will this set XY to 16 bit width (both are bit 3 in the status byte) ? 
+
+- If in native mode the m-flag is set, and we go emulated, will unused bit 5 be set as well?
 
 END
 

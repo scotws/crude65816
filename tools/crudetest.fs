@@ -190,7 +190,7 @@ opc-FB   \ switch back to emulation mode for further testing
 
 \ ---- ADDRESSING MODE TESTS ----
 
-\ HIER HIER 
+\ TODO FEHLT 
 
 \ ---- LOAD AND STORE INSTRUCTIONS ----
 
@@ -205,6 +205,7 @@ t-reset-PC
    A 0= and
    B 0= and
 t-result 
+
 
 
 \ ==== SUCCESSFULLY COMPLETED ====

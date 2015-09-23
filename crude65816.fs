@@ -611,7 +611,7 @@ cr .( Defining opcode routines ... )
 : opc-06 ( asl.d )  ." 06 not coded yet" ; 
 
 : opc-07 ( ora.dil )   ." 07 not coded yet" ; 
-: opc-08 ( php )   ." 08 not coded yet" ; 
+: opc-08 ( php )   P push8 ; 
 
 : opc-09 ( ora.# )  mode.imm fetch.a ora.a check-NZ.a PC+a ;
 

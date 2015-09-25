@@ -525,45 +525,53 @@ cr .( Defining addressing modes ...)
 \ manipulation should come before the mode word (eg "Y @  MODE.ABS.DBR"), not
 \ behind it. 
 
-\ Absolute 
+\ Examples for the modes are given for the traditional syntax and for Typist's
+\ Assembler
+
+\ ## Absolute: "LDA $1000" / "lda 1000" ##
 \ We need two different versions, one for instructions that affect data and take
 \ the DBR, and one for instructions that affect programs and take the PBR
 \ TODO handle page boundries / wrapping
 : mode.abs.DBR ( -- 65addr24 )  next2bytes mem16/DBR>24 PC+2 ;
 : mode.abs.PBR ( -- 65addr24 )  next2bytes mem16/PBR>24 PC+2 ;
 
-\ Absolute Indirect 
+\ ## Absolute Indirect: "JMP ($1000)" / "jmp.i 1000" ##
 \ TODO handle page boundries / wrapping
 : mode.i  ( -- 65addr24)  mode.abs.PBR  fetch16  mem16/PBR>24 ;
 
-\ Absolute Long 
+\ ## Absolute Long: "LDA $100000" / "lda.l 100000" ##
 \ TODO handle page boundries / wrapping
 : mode.l  ( -- 65addr24)  next3bytes PC+3 ;
 
-\ Absolute Indexed X/Y (pp. 289-290) 
+\ ## Absolute Indexed X/Y (pp. 289-290): "LDA $1000,X" / "lda.x 1000" ##
 \ Assumes that X will be the correct width (8 or 16 bit)
 \ TODO handle page boundries / wrapping
 : mode.x  ( -- 65addr24 )  mode.abs.DBR  X @  + ;
 : mode.y  ( -- 65addr24 )  mode.abs.DBR  Y @  + ;
 
-\ Absolute Long X Indexed 
+\ ## Absolute Long X Indexed: "LDA $100000,X" / "lda.lx 100000" ##  
 \ This assumes that X will be the correct width (8 or 16 bit) 
 \ TODO handle page boundries / wrapping
 : mode.lx ( -- 65addr24)  mode.l  X @  + ; 
 
-\ Direct Page (pp. 94, 155, 278) 
+\ ## Direct Page (pp. 94, 155, 278): "LDA $10" / "lda.d 10" ##
 \ Note that D can be relocated in Emulated Mode as well, see
 \ http://forum.6502.org/viewtopic.php?f=8&t=3459&p=40389#p40370 for details
 \ TODO handle page boundries / wrapping
-: mode.d ( -- 65addr24)  next1byte  D @  +   00  mem16/bank>24 PC+1 ;
+: mode.d  ( -- 65addr24)  next1byte  D @  +   00  mem16/bank>24 PC+1 ;
 
-\ Direct Page Indirect  (p. 302) 
+\ ## Direct Page Indexed X/Y (p. 299): "LDA $10,X" / "lda.dx 10" ##
+\ TODO handle page boundries / wrapping
+: mode.dx  ( -- 65addr24)  next1byte  D @ +  X @ +  0 mem16/bank>24 PC+1 ; 
+: mode.dy  ( -- 65addr24)  next1byte  D @ +  Y @ +  0 mem16/bank>24 PC+1 ; 
+
+\ ## Direct Page Indirect  (p. 302):  "LDA ($10)" / "lda.di 10" ##
 \ Note this uses the Data Bank Register DBR, not PBR
 \ TODO handle page boundries / wrapping
 : mode.di  ( -- 65addr24)  
    next1byte  D @  +  0  mem16/bank>24  fetch16  DBR @  mem16/bank>24 PC+1 ;
 
-\ Immediate Mode 
+\ ## Immediate Mode: "LDA #$10" / "lda.# 10" ##
 \ Note that this mode does not advance the PC as it is used with A and XY
 \ TODO handle page boundries / wrapping
 : mode.imm  ( -- 65addr24 )  PC24 ; 
@@ -644,6 +652,18 @@ cr .( Creating output functions ...)
    10 +loop cr ; 
 
 
+\ ---- OPCODE HELPER ROUTINES
+
+\ These combine sequences that repeat in the opcodes to save space and make
+\ corrections easier
+
+: and-core ( 65addr -- )  fetch.a and.a check-NZ.a ;
+: eor-core ( 65addr -- )  fetch.a eor.a check-NZ.a ; 
+: ora-core ( 65addr -- )  fetch.a ora.a check-NZ.a ; 
+
+: ldx-core ( 65addr -- )  fetch.xy  X !  check-NZ.x ;
+: ldy-core ( 65addr -- )  fetch.xy  Y !  check-NZ.y ;
+
 
 \ ---- OPCODE ROUTINES ----
 cr .( Defining opcode routines ... ) 
@@ -656,13 +676,14 @@ cr .( Defining opcode routines ... )
 : opc-02 ( cop )   ." 02 not coded yet" ; 
 : opc-03 ( ora.s )   ." 03 not coded yet" ; 
 : opc-04 ( tsb.d )  ." 04 not coded yet" ; 
-: opc-05 ( ora.d )   ." 05 not coded yet" ; 
+
+: opc-05 ( ora.d )  mode.d ora-core ; 
+
 : opc-06 ( asl.d )  ." 06 not coded yet" ; 
-
 : opc-07 ( ora.dil )   ." 07 not coded yet" ; 
-: opc-08 ( php )   P push8 ; 
 
-: opc-09 ( ora.# )  mode.imm fetch.a ora.a check-NZ.a PC+a ;
+: opc-08 ( php )  P push8 ; 
+: opc-09 ( ora.# )  mode.imm ora-core PC+a ;
 
 : opc-0A ( asl.a )   ." 0A not coded yet" ; 
 
@@ -670,26 +691,27 @@ cr .( Defining opcode routines ... )
 
 : opc-0C ( tsb )   ." 0C not coded yet" ; 
 
-: opc-0D ( ora )  mode.abs.DBR fetch.a ora.a check-NZ.a ;
+: opc-0D ( ora )  mode.abs.DBR ora-core ; 
 
 : opc-0E ( asl )   ." 0E not coded yet" ; 
 
-: opc-0F ( ora.l )  mode.l fetch.a ora.a check-NZ.a ;
-
+: opc-0F ( ora.l )  mode.l ora-core ; 
 : opc-10 ( bpl )  n-flag clear?  branch-if-true ; 
 
 : opc-11 ( ora.diy )   ." 11 not coded yet" ; 
-: opc-12 ( ora.di )   ." 12 not coded yet" ; 
+
+: opc-12 ( ora.di )  mode.di ora-core ; 
+
 : opc-13 ( ora.siy )   ." 13 not coded yet" ; 
 : opc-14 ( trb.d )   ." 14 not coded yet" ; 
-: opc-15 ( ora.dx )   ." 15 not coded yet" ; 
+
+: opc-15 ( ora.dx )  mode.dx ora-core ; 
+
 : opc-16 ( asl.dx )   ." 16 not coded yet" ; 
 : opc-17 ( ora.dily )   ." 17 not coded yet" ; 
 
 : opc-18 ( clc )  c-flag clear ; 
-
-: opc-19 ( ora.y )   mode.y fetch.a ora.a check-NZ.a ; 
-
+: opc-19 ( ora.y )   mode.y ora-core ; 
 : opc-1A ( inc.a )   inc.accu ;
 
 \ Does not affect flags; compare TXS. In emulation mode, hi byte is paranoided
@@ -698,11 +720,11 @@ cr .( Defining opcode routines ... )
 
 : opc-1C ( trb )   ." 1C not coded yet" ; 
 
-: opc-1D ( ora.x )  mode.x fetch.a ora.a check-NZ.a ; 
+: opc-1D ( ora.x )  mode.x ora-core ; 
 
 : opc-1E ( asl.x )  ." 1E not coded yet" ;  
 
-: opc-1F ( ora.lx )  mode.lx fetch.a ora.a check-NZ.a ;
+: opc-1F ( ora.lx )  mode.lx ora-core ; 
 
 \ STEP already increases the PC by one, so we only need to add one byte because
 \ the address pushed is the last byte of the instruction
@@ -715,13 +737,13 @@ cr .( Defining opcode routines ... )
 : opc-23 ( and.s )   ." 23 not coded yet" ; 
 : opc-24 ( bit.d )   ." 24 not coded yet" ; 
 
-: opc-25 ( and.d )  mode.d fetch.a and.a check-NZ.a ; 
+: opc-25 ( and.d )  mode.d and-core ; 
 
 : opc-26 ( rol.d )   ." 26 not coded yet" ; 
 : opc-27 ( and.dil )   ." 27 not coded yet" ; 
 
 : opc-28 ( plp )  pull8 >P ; 
-: opc-29 ( and.# )  mode.imm fetch.a and.a check-NZ.a PC+a ; 
+: opc-29 ( and.# )  mode.imm and-core PC+a ; 
 
 : opc-2A ( rol )   ." 2A not coded yet" ; 
 
@@ -730,28 +752,28 @@ cr .( Defining opcode routines ... )
 
 : opc-2C ( bit )   ." 2C not coded yet" ; 
 
-: opc-2D ( and )  mode.abs.DBR fetch.a and.a check-NZ.a ;
+: opc-2D ( and )  mode.abs.DBR and-core ; 
 
 : opc-2E ( rol )   ." 2E not coded yet" ; 
 
-: opc-2F ( and.l )  mode.l fetch.a and.a check-NZ.a ;
+: opc-2F ( and.l )  mode.l and-core ; 
 
 : opc-30 ( bmi )  n-flag set? branch-if-true ; 
 
 : opc-31 ( and.diy )   ." 31 not coded yet" ; 
 
-: opc-32 ( and.di )  mode.di fetch.a and.a check-NZ.a ;
+: opc-32 ( and.di )  mode.di and-core ; 
 
 : opc-33 ( and.siy )   ." 33 not coded yet" ; 
 : opc-34 ( bit.dx )   ." 34 not coded yet" ; 
-: opc-35 ( and.dx )   ." 35 not coded yet" ; 
+
+: opc-35 ( and.dx )   mode.dx and-core ; 
+
 : opc-36 ( rol.dx )   ." 36 not coded yet" ; 
-: opc-37 ( and.dy )   ." 37 not coded yet" ; 
 
+: opc-37 ( and.dily )  ." 37 not coded yet" ; 
 : opc-38 ( sec )  c-flag set ;  
-
-: opc-39 ( and.y )  mode.y fetch.a and.a check-NZ.a ;
-
+: opc-39 ( and.y )  mode.y and-core ; 
 : opc-3A ( dec.a )  dec.accu ;
 
 \ Assumes N affected by 16th bit in all modes
@@ -759,11 +781,11 @@ cr .( Defining opcode routines ... )
 
 : opc-3C ( bit.x )   ." 3C not coded yet" ; 
 
-: opc-3D ( and.x )   mode.x fetch.a and.a check-NZ.a ;
+: opc-3D ( and.x )   mode.x and-core ; 
 
 : opc-3E ( rol.x )   ." 3E not coded yet" ; 
 
-: opc-3F ( and.lx )  mode.lx fetch.a and.a check-NZ.a ;
+: opc-3F ( and.lx )  mode.lx and-core ; 
 
 : opc-40 ( rti )   ." 40 not coded yet" ; 
 : opc-41 ( eor.dxi )   ." 41 not coded yet" ; 
@@ -772,47 +794,47 @@ cr .( Defining opcode routines ... )
 
 : opc-43 ( eor.s )   ." 43 not coded yet" ; 
 : opc-44 ( mvp )   ." 44 not coded yet" ; 
-: opc-45 ( eor.d )   ." 45 not coded yet" ; 
+: opc-45 ( eor.d )  mode.d eor-core ; 
 : opc-46 ( lsr.d )   ." 46 not coded yet" ; 
 : opc-47 ( eor.dil )   ." 47 not coded yet" ; 
 : opc-48 ( pha )  C> push.a ; 
 
-: opc-49 ( eor.# )  mode.imm fetch.a eor.a check-NZ.a PC+a ;
+: opc-49 ( eor.# )  mode.imm eor-core PC+a ;
 
 : opc-4A ( lsr.a )   ." 4A not coded yet" ; 
 
 : opc-4B ( phk )  PBR @  push8 ;
 : opc-4C ( jmp )  next2bytes  PC ! ;
-: opc-4D ( eor )  mode.abs.DBR fetch.a eor.a check-NZ.a ;
+: opc-4D ( eor )  mode.abs.DBR eor-core ; 
 
 : opc-4E ( lsr )   ." 4E not coded yet" ; 
 
-: opc-4F ( eor.l )  mode.l fetch.a eor.a check-NZ.a ;
+: opc-4F ( eor.l )  mode.l eor-core ; 
 : opc-50 ( bvc )  v-flag clear? branch-if-true ; 
 
 : opc-51 ( eor.diy )   ." 51 not coded yet" ; 
 
-: opc-52 ( eor.di )  mode.di fetch.a eor.a check-NZ.a ;
+: opc-52 ( eor.di )  mode.di eor-core ; 
 
 : opc-53 ( eor.siy )   ." 53 not coded yet" ; 
 : opc-54 ( mvn )   ." 54 not coded yet" ; 
-: opc-55 ( eor.dx )   ." 55 not coded yet" ; 
+
+: opc-55 ( eor.dx )   mode.dx eor-core ; 
+
 : opc-56 ( lsr.dx )   ." 56 not coded yet" ; 
-: opc-57 ( eor.dy )   ." 57 not coded yet" ; 
+
+: opc-57 ( eor.dily ) ." 57 not coded yet" ; 
 
 : opc-58 ( cli )  i-flag clear ;  
-
-: opc-59 ( eor.y )  mode.y fetch.a eor.a check-NZ.a ;
-
+: opc-59 ( eor.y )  mode.y eor-core ; 
 : opc-5A ( phy )  Y @ push.xy ; 
 : opc-5B ( tcd )  C @  mask16 dup check-NZ.a  D ! ;
 : opc-5C ( jmp.l )  next3bytes 24>PC24! ; 
-: opc-5D ( eor.x )  mode.x fetch.a eor.a check-NZ.a ;
+: opc-5D ( eor.x )  mode.x eor-core ; 
 
 : opc-5E ( lsr.x )  ." 5E not coded yet" ; 
 
-: opc-5F ( eor.lx )  mode.lx fetch.a eor.a check-NZ.a ;
-
+: opc-5F ( eor.lx )  mode.lx eor-core ; 
 : opc-60 ( rts )  pull16 1+  PC ! ;
  
 : opc-61 ( adc.dxi )   ." 61 not coded yet" ; 
@@ -820,7 +842,6 @@ cr .( Defining opcode routines ... )
 : opc-63 ( adc.s )   ." 63 not coded yet" ; 
 
 : opc-64 ( stz.d )  0 mode.d store.a ; 
-
 : opc-65 ( adc.d )   ." 65 not coded yet" ; 
 : opc-66 ( ror.d )   ." 66 not coded yet" ; 
 : opc-67 ( adc.dil )   ." 67 not coded yet" ; 
@@ -842,7 +863,9 @@ cr .( Defining opcode routines ... )
 : opc-71 ( adc.diy )   ." 71 not coded yet" ; 
 : opc-72 ( adc.di )   ." 72 not coded yet" ; 
 : opc-73 ( adc.siy )   ." 73 not coded yet" ; 
-: opc-74 ( stx.dx )   ." 74 not coded yet" ; 
+
+: opc-74 ( stz.dx )  0 mode.dx store.a ; 
+
 : opc-75 ( adc.dx)   ." 75 not coded yet" ; 
 : opc-76 ( ror.dx )   ." 76 not coded yet" ; 
 : opc-77 ( adc.dy )   ." 77 not coded yet" ; 
@@ -868,7 +891,7 @@ cr .( Defining opcode routines ... )
 : opc-83 ( sta.s )   ." 83 not coded yet" ; 
 
 : opc-84 ( sty.d )  Y @  mode.d store.xy ;
-: opc-85 ( sta.d )  A @  mode.d store.a ; 
+: opc-85 ( sta.d )  C> mode.d store.a ; 
 : opc-86 ( stx.d )  X @  mode.d store.xy ;  
 
 : opc-87 ( sta.dil )   ." 87 not coded yet" ; 
@@ -881,19 +904,22 @@ cr .( Defining opcode routines ... )
 
 : opc-8B ( phb )  DBR @  push8 ; 
 : opc-8C ( sty )  Y @  mode.abs.DBR store.xy ;
-: opc-8D ( sta )  C @  mode.abs.DBR store.a ; 
+: opc-8D ( sta )  C>  mode.abs.DBR store.a ; 
 : opc-8E ( stx )  X @  mode.abs.DBR store.xy ;
-: opc-8F ( sta.l )  mode.l store.a ; 
+: opc-8F ( sta.l ) C> mode.l store.a ; 
 : opc-90 ( bcc )  c-flag clear? branch-if-true ; 
 
 : opc-91 ( sta.diy )   ." 91 not coded yet" ; 
 
-: opc-92 ( sta.di )  mode.di store.a ;
+: opc-92 ( sta.di ) C> mode.di store.a ;
 
 : opc-93 ( sta.siy )   ." 93 not coded yet" ; 
-: opc-94 ( sty.dx )   ." 94 not coded yet" ; 
-: opc-95 ( sta.dx )   ." 95 not coded yet" ; 
-: opc-96 ( stx.dy )   ." 96 not coded yet" ; 
+
+: opc-94 ( sty.dx )  Y @  mode.dx store.xy ; 
+: opc-95 ( sta.dx )  C> mode.dx store.a ; 
+
+: opc-96 ( stx.dy )  X @  mode.dy store.xy ; 
+
 : opc-97 ( sta.dily )   ." 97 not coded yet" ; 
 
 : opc-98 ( tya )  Y @  >C check-NZ.a ; 
@@ -909,20 +935,20 @@ cr .( Defining opcode routines ... )
             
 : opc-9B ( txy )  X @  Y !  check-NZ.y ;
 : opc-9C ( stz )  0 mode.abs.DBR store.a ; 
-: opc-9D ( sta.x )  mode.x store.a ; 
+: opc-9D ( sta.x ) C> mode.x store.a ; 
 : opc-9E ( stz.x )  0 mode.x store.a ;
-: opc-9F ( sta.lx )  mode.lx store.a ;
-: opc-A0 ( ldy.# )  mode.imm fetch.xy  Y !  check-NZ.y PC+xy ;
+: opc-9F ( sta.lx ) C> mode.lx store.a ;
+: opc-A0 ( ldy.# )  mode.imm ldy-core PC+xy ;
 
 : opc-A1 ( lda.dxi )   ." A1 not coded yet" ; 
 
-: opc-A2 ( ldx.# )  mode.imm fetch.xy  X !  check-NZ.x PC+xy ;
+: opc-A2 ( ldx.# )  mode.imm ldx-core PC+xy ;
 
 : opc-A3 ( lda.s )   ." A3 not coded yet" ; 
 
-: opc-A4 ( ldy.d )  mode.d fetch.xy  Y !  check-NZ.y ; 
+: opc-A4 ( ldy.d )  mode.d ldy-core ; 
 : opc-A5 ( lda.d )  mode.d fetch.a >C check-NZ.a ; 
-: opc-A6 ( ldx.d )  mode.d fetch.xy  X !  check-NZ.x ; 
+: opc-A6 ( ldx.d )  mode.d ldx-core ; 
 
 : opc-A7 ( lda.dil )   ." A7 not coded yet" ; 
 
@@ -930,9 +956,9 @@ cr .( Defining opcode routines ... )
 : opc-A9 ( lda.# ) mode.imm fetch.a >C check-NZ.a PC+a ; 
 : opc-AA ( tax )  C @  mask.xy  X !  check-NZ.x ; 
 : opc-AB ( plb )  pull8 dup check-NZ.8 DBR ! ; \ CHECK-NZ.8 consumes TOS
-: opc-AC ( ldy )  mode.abs.DBR fetch.xy  Y !  check-NZ.y ;
+: opc-AC ( ldy )  mode.abs.DBR ldy-core ; 
 : opc-AD ( lda )  mode.abs.DBR fetch.a >C check-NZ.a ;
-: opc-AE ( ldx )  mode.abs.DBR fetch.xy  X !  check-NZ.x ;
+: opc-AE ( ldx )  mode.abs.DBR ldx-core ; 
 : opc-AF ( lda.l ) mode.l fetch.a check-NZ.a ; 
 : opc-B0 ( bcs )  c-flag set? branch-if-true ;  
 
@@ -941,19 +967,20 @@ cr .( Defining opcode routines ... )
 : opc-B2 ( lda.di )  mode.di fetch.a check-NZ.a ; 
 
 : opc-B3 ( lda.siy )   ." B3 not coded yet" ; 
-: opc-B4 ( ldy.dx )   ." B4 not coded yet" ; 
-: opc-B5 ( lda.dx )   ." B5 not coded yet" ; 
-: opc-B6 ( ldx.dy )   ." B6 not coded yet" ; 
-: opc-B7 ( lda.dy )   ." B7 not coded yet" ; 
+
+: opc-B4 ( ldy.dx )  mode.dx ldy-core ; 
+: opc-B5 ( lda.dx )  mode.dx fetch.a >C check-NZ.a ;
+: opc-B6 ( ldx.dy )  mode.dy ldx-core ; 
+
+: opc-B7 ( lda.dily )  ." B7 not coded yet" ; 
 
 : opc-B8 ( clv ) v-flag clear ; 
-
 : opc-B9 ( lda.y )  mode.y fetch.a check-NZ.a ;
 : opc-BA ( tsx )  S @  xy16flag clear? if mask8 then  X !  check-NZ.x ;  
 : opc-BB ( tyx )  Y @  X !  check-NZ.x ;
-: opc-BC ( ldy.x )  mode.x fetch.xy  Y !  check-NZ.y ;
+: opc-BC ( ldy.x )  mode.x ldy-core ; 
 : opc-BD ( lda.x )  mode.x fetch.a >C check-NZ.a ;
-: opc-BE ( ldx.y )  mode.y fetch.xy  X !  check-NZ.y ; 
+: opc-BE ( ldx.y )  mode.y ldx-core ; 
 : opc-BF ( lda.lx )  mode.lx fetch.a >C check-NZ.a ;
 
 : opc-C0 ( cpy.# )   ." C0 not coded yet" ; 
@@ -969,14 +996,14 @@ cr .( Defining opcode routines ... )
 
 : opc-C3 ( cmp.s )   ." C3 not coded yet" ; 
 : opc-C4 ( cpy.d )   ." C4 not coded yet" ; 
-: opc-C5 ( cmp.d )   ." C5 not coded yet" ; 
 
+: opc-C5 ( cmp.d )   C> mode.d fetch.a cmp.a ;
 : opc-C6 ( dec.d )  mode.d dec.mem ;
 
 : opc-C7 ( cmp.dil )   ." C7 not coded yet" ; 
 
 : opc-C8 ( iny )  Y @  1+  mask.xy  Y !  check-NZ.y ;
-: opc-C9 ( cmp.# )  mode.imm fetch.a mask.a cmp.a PC+a ; 
+: opc-C9 ( cmp.# ) C> mode.imm fetch.a cmp.a PC+a ; 
 : opc-CA ( dex )  X @  1- mask.xy  X !  check-NZ.x ;
 
 : opc-CB ( wai ) \ TODO crude testing version, complete this for i-flag
@@ -987,24 +1014,24 @@ cr .( Defining opcode routines ... )
 : opc-CD ( cmp )  ." CD not coded yet" ; 
 
 : opc-CE ( dec )  mode.abs.DBR dec.mem ;
-
-: opc-CF ( cmp.l )   ." CF not coded yet" ; 
-
+: opc-CF ( cmp.l )  C> mode.l fetch.a cmp.a ; 
 : opc-D0 ( bne )  z-flag clear? branch-if-true ; 
 
 : opc-D1 ( cmp.diy )   ." D1 not coded yet" ; 
-: opc-D2 ( cmp.di )   ." D2 not coded yet" ; 
+
+: opc-D2 ( cmp.di )  C> mode.di fetch.a cmp.a ; 
+
 : opc-D3 ( cmp.siy )   ." D3 not coded yet" ; 
 
 : opc-D4 ( phe.d )  mode.d fetch16 push16 ; \ pp. 169, 373
+: opc-D5 ( cmp.dx )  C> mode.dx fetch.a cmp.a PC+a ; 
+: opc-D6 ( dec.dx )  mode.dx dec.mem ; 
 
-: opc-D5 ( cmp.dx )   ." D5 not coded yet" ; 
-: opc-D6 ( dec.dx )   ." D6 not coded yet" ; 
-: opc-D7 ( cmp.dy )   ." D7 not coded yet" ; 
+: opc-D7 ( cmp.dily )  ." D7 not coded yet" ; 
 
 : opc-D8 ( cld )  d-flag clear ;  
 
-: opc-D9 ( cmp.y )   ." D9 not coded yet" ; 
+: opc-D9 ( cmp.y )  C> mode.y fetch.a cmp.a ; 
 
 : opc-DA ( phx )  X @  push.xy ;
 
@@ -1012,9 +1039,11 @@ cr .( Defining opcode routines ... )
    .state quit ; 
 
 : opc-DC ( jmp.il )   ." DC not coded yet" ; 
-: opc-DD ( cmp.x )   ." DD not coded yet" ; 
-: opc-DE ( dec.x )   ." DE not coded yet" ; 
-: opc-DF ( cmp.lx )   ." DF not coded yet" ; 
+
+: opc-DD ( cmp.x )  C> mode.x fetch.a cmp.a ;  
+: opc-DE ( dec.x )   mode.x dec.mem ; 
+: opc-DF ( cmp.lx ) C> mode.lx fetch.a cmp.a ;  
+
 : opc-E0 ( cpx.# )   ." E0 not coded yet" ; 
 : opc-E1 ( sbc.dxi )  ." E1 not coded yet" ; 
 
@@ -1060,7 +1089,9 @@ cr .( Defining opcode routines ... )
 : opc-F4 ( phe.# )  next2bytes push16 PC+2 ;
 
 : opc-F5 ( sbc.dx )   ." F5 not coded yet" ; 
-: opc-F6 ( inc.dx )   ." F6 not coded yet" ; 
+
+: opc-F6 ( inc.dx )   mode.dx inc.mem ; 
+
 : opc-F7 ( sbc.dily )   ." F7 not coded yet" ; 
 
 : opc-F8 ( sed )  d-flag set ; 
@@ -1074,7 +1105,9 @@ cr .( Defining opcode routines ... )
 
 : opc-FC ( jsr.xi )   ." FC not coded yet" ; 
 : opc-FD ( sbc.x )   ." FD not coded yet" ; 
-: opc-FE ( inc.x )   ." FE not coded yet" ; 
+
+: opc-FE ( inc.x )  mode.x inc.mem ; 
+
 : opc-FF ( sbc.lx )   ." FF not coded yet" ; 
 
 

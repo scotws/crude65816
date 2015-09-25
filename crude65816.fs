@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 23. Sep 2015 
+\ This version: 25. Sep 2015 
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version pre-ALPHA  21. Sep 2015)  
+cr .( Version pre-ALPHA  25. Sep 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -333,7 +333,7 @@ defer cmp.a  defer cmp.xy
 \ --- BRANCHING --- 
 cr .( Setting up branching ...) 
 
-: takebranch ( -- )  next1byte signextend 1+  + ;  \ BRANCH reserved by Forth
+: takebranch ( -- )  next1byte signextend 1+  PC @ +  PC ! ;
 : branch-if-true ( f -- )  if takebranch else PC+1 then ; 
 
 
@@ -813,7 +813,7 @@ cr .( Defining opcode routines ... )
 
 : opc-5F ( eor.lx )  mode.lx fetch.a eor.a check-NZ.a ;
 
-: opc-60 ( rts )  drop pull16 1+ ;
+: opc-60 ( rts )  pull16 1+  PC ! ;
  
 : opc-61 ( adc.dxi )   ." 61 not coded yet" ; 
 : opc-62 ( phe.r )   ." 62 not coded yet" ; 

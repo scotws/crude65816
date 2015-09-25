@@ -134,13 +134,6 @@ NOTES ON INTERNAL CONSTRUCTION
 The Crude Emulator keeps all values in variables. Experiments with first A as the top of the Forth stack (TOS) and then PC worked, but make working with it as a debugging tool more difficult: You either had to reload A or PC by hand after every crash. The Forth stack should be empty after every successful instruction.
 
 
-THE CRUDETEST TESTING SUITE 
-
-The emulator includes a crude testing suite that can be use for regression testing. The program is named CRUDETEST.FS. To invoke it, start Gforth and INCLUDE CRUDE65816.FS with any binary source code. Then, INCLUDE TOOLS/CRUDETEST.FS. The program will print a matrix of the correct machine instructions and abort at the first error encountered. Befitting a crude emulator, the tests themselves are rather crude as well, so it would be wrong to place too much faith in them, but they are better than nothing.
-
-(FEHLT Emulated mode can be tested with external tests)
-
-
 OTHER NOTES
 
 Though the documentation is unclear on this subject, tests have shown that you can relocate the Direct Page in Emulation Mode, 

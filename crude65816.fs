@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 26. Sep 2015 
+\ This version: 27. Sep 2015 
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version pre-ALPHA  26. Sep 2015)  
+cr .( Version pre-ALPHA  27. Sep 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -554,7 +554,8 @@ cr .( Defining addressing modes ...)
 
 \ ## Absolute X Indexed Indirect (p. 291): "JMP ($1000,X)" / "jmp.xi 1000" ##
 \ TODO handle page boundries / wrapping
-: mode.xi  ( -- 65addr24 )  next2bytes  X @ +  mask16  PBR @ mem16/bank>24 ; 
+: mode.xi  ( -- 65addr24 )  next2bytes  X @ +  
+   mask16  PBR @  mem16/bank>24 fetch16 ; 
 
 \ ## Absolute Long: "LDA $100000" / "lda.l 100000" ##
 \ TODO handle page boundries / wrapping
@@ -695,6 +696,7 @@ cr .( Creating output functions ...)
 : eor-core ( 65addr -- )  fetch.a eor.a check-NZ.a ; 
 : ora-core ( 65addr -- )  fetch.a ora.a check-NZ.a ; 
 
+: lda-core ( 65addr -- )  fetch.a  >C  check-NZ.a ;
 : ldx-core ( 65addr -- )  fetch.xy  X !  check-NZ.x ;
 : ldy-core ( 65addr -- )  fetch.xy  Y !  check-NZ.y ;
 
@@ -875,11 +877,12 @@ cr .( Defining opcode routines ... )
 : opc-63 ( adc.s )   ." 63 not coded yet" ; 
 
 : opc-64 ( stz.d )  0 mode.d store.a ; 
+
 : opc-65 ( adc.d )   ." 65 not coded yet" ; 
 : opc-66 ( ror.d )   ." 66 not coded yet" ; 
 : opc-67 ( adc.dil )   ." 67 not coded yet" ; 
 
-: opc-68 ( pla )  pull.a dup check-NZ.a fetch.a >C ; 
+: opc-68 ( pla )  pull.a >C check-NZ.a ; 
 
 : opc-69 ( adc.# )   ." 69 not coded yet" ; 
 : opc-6A ( ror.a )   ." 6A not coded yet" ; 
@@ -961,27 +964,27 @@ cr .( Defining opcode routines ... )
 : opc-9E ( stz.x )  0 mode.x store.a ;
 : opc-9F ( sta.lx ) C> mode.lx store.a ;
 : opc-A0 ( ldy.# )  mode.imm ldy-core PC+xy ;
-: opc-A1 ( lda.dxi )  mode.dxi fetch.a >C check-NZ.a ; 
+: opc-A1 ( lda.dxi )  mode.dxi lda-core ; 
 : opc-A2 ( ldx.# )  mode.imm ldx-core PC+xy ;
-: opc-A3 ( lda.s )  mode.s fetch.a >C check-NZ.a ; 
+: opc-A3 ( lda.s )  mode.s lda-core ; 
 : opc-A4 ( ldy.d )  mode.d ldy-core ; 
-: opc-A5 ( lda.d )  mode.d fetch.a >C check-NZ.a ; 
+: opc-A5 ( lda.d )  mode.d lda-core ; 
 : opc-A6 ( ldx.d )  mode.d ldx-core ; 
-: opc-A7 ( lda.dil )  mode.dil fetch.a >C check-NZ.a ; 
+: opc-A7 ( lda.dil )  mode.dil lda-core ; 
 : opc-A8 ( tay )  C @  mask.xy  Y !  check-NZ.y ; 
-: opc-A9 ( lda.# ) mode.imm fetch.a >C check-NZ.a PC+a ; 
+: opc-A9 ( lda.# ) mode.imm lda-core PC+a ; 
 : opc-AA ( tax )  C @  mask.xy  X !  check-NZ.x ; 
 : opc-AB ( plb )  pull8 dup check-NZ.8 DBR ! ; \ CHECK-NZ.8 consumes TOS
 : opc-AC ( ldy )  mode.abs.DBR ldy-core ; 
-: opc-AD ( lda )  mode.abs.DBR fetch.a >C check-NZ.a ;
+: opc-AD ( lda )  mode.abs.DBR lda-core ;
 : opc-AE ( ldx )  mode.abs.DBR ldx-core ; 
-: opc-AF ( lda.l ) mode.l fetch.a check-NZ.a ; 
+: opc-AF ( lda.l ) mode.l lda-core ; 
 : opc-B0 ( bcs )  c-flag set? branch-if-true ;  
-: opc-B1 ( lda.diy )   mode.diy fetch.a >C check-NZ.a ; 
-: opc-B2 ( lda.di )  mode.di fetch.a >C check-NZ.a ; 
-: opc-B3 ( lda.siy )  mode.siy fetch.a >C check-NZ.a ;  
+: opc-B1 ( lda.diy )   mode.diy lda-core ; 
+: opc-B2 ( lda.di )  mode.di lda-core ; 
+: opc-B3 ( lda.siy )  mode.siy lda-core ;  
 : opc-B4 ( ldy.dx )  mode.dx ldy-core ; 
-: opc-B5 ( lda.dx )  mode.dx fetch.a >C check-NZ.a ;
+: opc-B5 ( lda.dx )  mode.dx lda-core ;
 : opc-B6 ( ldx.dy )  mode.dy ldx-core ; 
 
 : opc-B7 ( lda.dily )  ." B7 not coded yet" ; 
@@ -991,9 +994,9 @@ cr .( Defining opcode routines ... )
 : opc-BA ( tsx )  S @  xy16flag clear? if mask8 then  X !  check-NZ.x ;  
 : opc-BB ( tyx )  Y @  X !  check-NZ.x ;
 : opc-BC ( ldy.x )  mode.x ldy-core ; 
-: opc-BD ( lda.x )  mode.x fetch.a >C check-NZ.a ;
+: opc-BD ( lda.x )  mode.x lda-core ;
 : opc-BE ( ldx.y )  mode.y ldx-core ; 
-: opc-BF ( lda.lx )  mode.lx fetch.a >C check-NZ.a ;
+: opc-BF ( lda.lx )  mode.lx lda-core ;
 
 : opc-C0 ( cpy.# )   ." C0 not coded yet" ; 
 

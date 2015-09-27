@@ -229,11 +229,19 @@ variable e-flag
 \ TODO see what actually happens during these switches
 : unused-flag ( -- addr ) flags 2 cells + ; 
 
+defer mask-N.a
+: mask-N.8  ( u8 -- u8 ) 80 and ; 
+: mask-N.16 ( u16 -- u16 ) 8000 and ; 
+
+defer mask-V.a 
+: mask-V.8  ( u8 -- u8 ) 40 and ; 
+: mask-V.16 ( u16 -- u16 ) 4000 and ; 
 
 \ ---- TEST AND SET FLAGS ----
 
 \ The basic, unspecific routines consume TOS, the derived functions do not
 \ TODO Rewrite and combine these once we know what we are doing 
+\ TODO Change these to use mask-N 
 
 \ Carry Flag
 defer check-C.a  defer check-C.x  defer check-C.y
@@ -330,6 +338,7 @@ defer dec.mem
    dup fetch16 1- mask16  dup check-NZ.16  swap store16 ; 
 
 \ Compare instructions 
+\
 \ See http://www.6502.org/tutorials/compare_beyond.html for discussion TODO see
 \ if we need these or if we can use the CHECK-XX routines directly for the CMP
 \ instructions
@@ -401,6 +410,8 @@ variable xy16flag  xy16flag clear
    ['] push16 is push.a 
    ['] pull16 is pull.a
    ['] mask16 is mask.a
+   ['] mask-N.16 is mask-N.a
+   ['] mask-V.16 is mask-V.a
    a16flag set ; 
 
 : a:8 ( -- )  
@@ -425,6 +436,8 @@ variable xy16flag  xy16flag clear
    ['] push8 is push.a 
    ['] pull8 is pull.a
    ['] mask8 is mask.a
+   ['] mask-N.8 is mask-N.a
+   ['] mask-V.8 is mask-V.a
    a16flag clear ;
 
 \ Switch X and Y 8<->16 bit (p. 51 in Manual) 
@@ -710,6 +723,11 @@ cr .( Creating output functions ...)
 : ora-core ( 65addr -- )  fetch.a ora.a check-NZ.a ; 
 : lsr-core ( 65addr -- )  dup fetch.a lsr tuck swap store.a check-NZ.TOS ; 
 
+: bit-core ( 65addr -- ) fetch.a
+   dup mask-N.a 0= if n-flag clear else n-flag set then
+   dup mask-V.a 0= if v-flag clear else v-flag set then
+   C> and check-Z ;  
+
 : cmp-core ( u 65addr -- ) fetch.a cmp.a ; 
 : cpxy-core ( u 65addr -- ) fetch.xy cmp.xy ; 
 
@@ -786,9 +804,7 @@ cr .( Defining opcode routines ... )
 : opc-21 ( and.dxi )  mode.dxi and-core ; 
 : opc-22 ( jsr.l )  PC24  2 +  push24 next3bytes 24>PC24! ;
 : opc-23 ( and.s )  mode.s and-core ; 
-
-: opc-24 ( bit.d )   ." 24 not coded yet" ; 
-
+: opc-24 ( bit.d )  mode.d bit-core ; 
 : opc-25 ( and.d )  mode.d and-core ; 
 
 : opc-26 ( rol.d )   ." 26 not coded yet" ; 
@@ -801,9 +817,7 @@ cr .( Defining opcode routines ... )
 
 \ Affects N and Z, is always 16 bit
 : opc-2B ( pld )  pull16 dup check-Z dup check-N16  D ! ;
-
-: opc-2C ( bit )   ." 2C not coded yet" ; 
-
+: opc-2C ( bit )  mode.abs.DBR bit-core ;  
 : opc-2D ( and )  mode.abs.DBR and-core ; 
 
 : opc-2E ( rol )   ." 2E not coded yet" ; 
@@ -814,9 +828,7 @@ cr .( Defining opcode routines ... )
 : opc-31 ( and.diy )   mode.diy and-core ;
 : opc-32 ( and.di )  mode.di and-core ; 
 : opc-33 ( and.siy )  mode.siy and-core ; 
-
-: opc-34 ( bit.dx )  ." 34 not coded yet" ; 
-
+: opc-34 ( bit.dx )  mode.dx bit-core ; 
 : opc-35 ( and.dx )  mode.dx and-core ; 
 
 : opc-36 ( rol.dx )  ." 36 not coded yet" ; 
@@ -828,9 +840,7 @@ cr .( Defining opcode routines ... )
 
 \ Assumes N affected by 16th bit in all modes
 : opc-3B ( tsc )  S @  mask16 check-NZ.a ; 
-
-: opc-3C ( bit.x )   ." 3C not coded yet" ; 
-
+: opc-3C ( bit.x )  mode.x bit-core ; 
 : opc-3D ( and.x )   mode.x and-core ; 
 
 : opc-3E ( rol.x )   ." 3E not coded yet" ; 
@@ -933,11 +943,8 @@ cr .( Defining opcode routines ... )
 : opc-86 ( stx.d )  X @  mode.d store.xy ;  
 : opc-87 ( sta.dil )  C> mode.dil store.a ; 
 : opc-88 ( dey )  Y @  1- mask.xy  Y !  check-NZ.y ;
-
-: opc-89 ( bit.# )   ." 89 not coded yet" ; 
-
+: opc-89 ( bit.# )  C> mode.imm fetch.a and check-Z ; 
 : opc-8A ( txa )  X @  >C check-NZ.a ; 
-
 : opc-8B ( phb )  DBR @  push8 ; 
 : opc-8C ( sty )  Y @  mode.abs.DBR store.xy ;
 : opc-8D ( sta )  C>  mode.abs.DBR store.a ; 

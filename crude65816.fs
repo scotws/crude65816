@@ -270,6 +270,7 @@ defer check-Z.a
 : check-Z.y ( -- )  Y @  check-Z ; 
 
 \ Common combinations
+defer check-NZ.TOS   \ Used for LSR and other instructions that don't work on C 
 : check-NZ.8 ( n8 -- )  dup check-N8 check-Z ; 
 : check-NZ.16 ( n16 -- )  dup check-N16 check-Z ; 
 : check-NZ.a ( -- )  check-N.a  check-Z.a ; 
@@ -295,6 +296,11 @@ defer eor.a
 defer ora.a
 : ora8  ( u8 -- ) mask8 A or  A>C! ;
 : ora16 ( u16 -- ) mask16  C @  or  C ! ; 
+
+\ This works for both 8 and 16 bit accumulators
+: lsr ( u -- u)  dup  1 and 
+   0= if c-flag clear else c-flag set then   \ TODO make this a separate word
+   1 rshift ; 
 
 
 \ TODO Combine these words once we know what we are doing
@@ -381,6 +387,7 @@ variable xy16flag  xy16flag clear
    ['] PC+2 is PC+a
    ['] check-N.a16 is check-N.a
    ['] check-Z.a16 is check-Z.a
+   ['] check-NZ.8 is check-NZ.TOS
    ['] and16 is and.a
    ['] eor16 is eor.a
    ['] ora16 is ora.a
@@ -404,6 +411,7 @@ variable xy16flag  xy16flag clear
    ['] PC+1 is PC+a
    ['] check-N.a8 is check-N.a
    ['] check-Z.a8 is check-Z.a
+   ['] check-NZ.8 is check-NZ.TOS
    ['] and8 is and.a
    ['] eor8 is eor.a
    ['] ora8 is ora.a
@@ -700,6 +708,7 @@ cr .( Creating output functions ...)
 : and-core ( 65addr -- )  fetch.a and.a check-NZ.a ;
 : eor-core ( 65addr -- )  fetch.a eor.a check-NZ.a ; 
 : ora-core ( 65addr -- )  fetch.a ora.a check-NZ.a ; 
+: lsr-core ( 65addr -- )  dup fetch.a lsr tuck swap store.a check-NZ.TOS ; 
 
 : cmp-core ( u 65addr -- ) fetch.a cmp.a ; 
 : cpxy-core ( u 65addr -- ) fetch.xy cmp.xy ; 
@@ -839,21 +848,15 @@ cr .( Defining opcode routines ... )
 : opc-44 ( mvp )   ." 44 not coded yet" ; 
 
 : opc-45 ( eor.d )  mode.d eor-core ; 
-
-: opc-46 ( lsr.d )   ." 46 not coded yet" ; 
-
+: opc-46 ( lsr.d )   mode.d lsr-core ; 
 : opc-47 ( eor.dil )  mode.dil eor-core ;  
 : opc-48 ( pha )  C> push.a ; 
 : opc-49 ( eor.# )  mode.imm eor-core PC+a ;
-
-: opc-4A ( lsr.a )   ." 4A not coded yet" ; 
-
+: opc-4A ( lsr.a ) C> lsr >C check-NZ.a ; 
 : opc-4B ( phk )  PBR @  push8 ;
 : opc-4C ( jmp )  next2bytes  PC ! ;
 : opc-4D ( eor )  mode.abs.DBR eor-core ; 
-
-: opc-4E ( lsr )   ." 4E not coded yet" ; 
-
+: opc-4E ( lsr )  mode.abs.DBR dup fetch.a lsr tuck swap store.a check-NZ.TOS ; 
 : opc-4F ( eor.l )  mode.l eor-core ; 
 : opc-50 ( bvc )  v-flag clear? branch-if-true ; 
 : opc-51 ( eor.diy )  mode.diy eor-core ;  
@@ -863,9 +866,7 @@ cr .( Defining opcode routines ... )
 : opc-54 ( mvn )   ." 54 not coded yet" ; 
 
 : opc-55 ( eor.dx )   mode.dx eor-core ; 
-
-: opc-56 ( lsr.dx )   ." 56 not coded yet" ; 
-
+: opc-56 ( lsr.dx ) mode.dx lsr-core ; 
 : opc-57 ( eor.dily )  mode.dily eor-core ; 
 : opc-58 ( cli )  i-flag clear ;  
 : opc-59 ( eor.y )  mode.y eor-core ; 
@@ -873,9 +874,7 @@ cr .( Defining opcode routines ... )
 : opc-5B ( tcd )  C @  mask16 dup check-NZ.a  D ! ;
 : opc-5C ( jmp.l )  next3bytes 24>PC24! ; 
 : opc-5D ( eor.x )  mode.x eor-core ; 
-
-: opc-5E ( lsr.x )  ." 5E not coded yet" ; 
-
+: opc-5E ( lsr.x )  mode.x lsr-core ; 
 : opc-5F ( eor.lx )  mode.lx eor-core ; 
 : opc-60 ( rts )  pull16 1+  PC ! ;
  

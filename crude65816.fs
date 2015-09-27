@@ -566,36 +566,41 @@ cr .( Defining addressing modes ...)
 \ TODO handle page boundries / wrapping
 : mode.lx ( -- 65addr24)  mode.l  X @  + ; 
 
-\ ## Direct Page (pp. 94, 155, 278): "LDA $10" / "lda.d 10" ##
+\ ## Direct Page (DP) (pp. 94, 155, 278): "LDA $10" / "lda.d 10" ##
 \ Note that D can be relocated in Emulated Mode as well, see
 \ http://forum.6502.org/viewtopic.php?f=8&t=3459&p=40389#p40370 for details
 \ TODO handle page boundries / wrapping
 : mode.d  ( -- 65addr24)  mode.d-core   00  mem16/bank>24 PC+1 ;
 
-\ ## Direct Page Indexed X/Y (p. 299): "LDA $10,X" / "lda.dx 10" ##
+\ ## DP Indexed X/Y (p. 299): "LDA $10,X" / "lda.dx 10" ##
 \ TODO handle page boundries / wrapping
 : mode.dx  ( -- 65addr24)  mode.d-core  X @ +  0 mem16/bank>24 PC+1 ; 
 : mode.dy  ( -- 65addr24)  mode.d-core  Y @ +  0 mem16/bank>24 PC+1 ; 
 
-\ ## Direct Page Indirect  (p. 302):  "LDA ($10)" / "lda.di 10" ##
+\ ## DP Indirect  (p. 302):  "LDA ($10)" / "lda.di 10" ##
 \ Note this uses the Data Bank Register DBR, not PBR
 \ TODO handle page boundries / wrapping
 : mode.di  ( -- 65addr24)  
    mode.d-core  00 mem16/bank>24  fetch16  DBR @  mem16/bank>24 PC+1 ;
 
-\ ## Direct Page Indirect X Indexed (p. 300): "LDA ($10,X)" / "lda.dxi 10" ##
+\ ## DP Indirect X Indexed (p. 300): "LDA ($10,X)" / "lda.dxi 10" ##
 \ TODO handle page boundries / wrapping
 : mode.dxi  ( -- 65addr24)  mode.d-core  X @ +  00 mem16/bank>24 
    fetch16  DBR @ mem16/bank>24 PC+1 ; 
 
-\ ## Direct Page Indirect Y Indexed (p. 304): "LDA ($10),Y" / "lda.diy 10" ##
+\ ## DP Indirect Y Indexed (p. 304): "LDA ($10),Y" / "lda.diy 10" ##
 \ Does not need a "PC+1" because this is contained in MODE.DI
 \ TODO handle page boundries / wrapping
 : mode.diy  ( -- 65addr24)  mode.di  Y @ + ; 
 
-\ ## Direct Page Indirect Long: "LDA [$10]" / "lda.dil 10" ##
+\ ## DP Indirect Long: "LDA [$10]" / "lda.dil 10" ##
 \ TODO handle page boundries / wrapping
 : mode.dil  ( -- 65addr24) mode.d-core  00 mem16/bank>24 fetch24 PC+1 ; 
+\
+\ ## DP Indirect Long Y Addressing : "LDA [$10],y" / "lda.dily 10" ##
+\ TODO handle page boundries / wrapping 
+\ TODO KNOWN ISSUE: WRAPING BROKEN IF Y IN 16 BIT MODE
+: mode.dily  ( -- 65addr24) mode.dil  Y @ + ; 
 
 \ ## Immediate Mode: "LDA #$10" / "lda.# 10" ##
 \ Note that this mode does not advance the PC as it is used with A and XY
@@ -696,6 +701,9 @@ cr .( Creating output functions ...)
 : eor-core ( 65addr -- )  fetch.a eor.a check-NZ.a ; 
 : ora-core ( 65addr -- )  fetch.a ora.a check-NZ.a ; 
 
+: cmp-core ( u 65addr -- ) fetch.a cmp.a ; 
+: cpxy-core ( u 65addr -- ) fetch.xy cmp.xy ; 
+
 : lda-core ( 65addr -- )  fetch.a  >C  check-NZ.a ;
 : ldx-core ( 65addr -- )  fetch.xy  X !  check-NZ.x ;
 : ldy-core ( 65addr -- )  fetch.xy  Y !  check-NZ.y ;
@@ -745,8 +753,8 @@ cr .( Defining opcode routines ... )
 : opc-15 ( ora.dx )  mode.dx ora-core ; 
 
 : opc-16 ( asl.dx )   ." 16 not coded yet" ; 
-: opc-17 ( ora.dily )   ." 17 not coded yet" ; 
 
+: opc-17 ( ora.dily )  mode.dily ora-core ;  
 : opc-18 ( clc )  c-flag clear ; 
 : opc-19 ( ora.y )   mode.y ora-core ; 
 : opc-1A ( inc.a )   inc.accu ;
@@ -798,13 +806,13 @@ cr .( Defining opcode routines ... )
 : opc-32 ( and.di )  mode.di and-core ; 
 : opc-33 ( and.siy )  mode.siy and-core ; 
 
-: opc-34 ( bit.dx )   ." 34 not coded yet" ; 
+: opc-34 ( bit.dx )  ." 34 not coded yet" ; 
 
-: opc-35 ( and.dx )   mode.dx and-core ; 
+: opc-35 ( and.dx )  mode.dx and-core ; 
 
-: opc-36 ( rol.dx )   ." 36 not coded yet" ; 
+: opc-36 ( rol.dx )  ." 36 not coded yet" ; 
 
-: opc-37 ( and.dily )  ." 37 not coded yet" ; 
+: opc-37 ( and.dily )  mode.dily and-core ; 
 : opc-38 ( sec )  c-flag set ;  
 : opc-39 ( and.y )  mode.y and-core ; 
 : opc-3A ( dec.a )  dec.accu ;
@@ -858,8 +866,7 @@ cr .( Defining opcode routines ... )
 
 : opc-56 ( lsr.dx )   ." 56 not coded yet" ; 
 
-: opc-57 ( eor.dily ) ." 57 not coded yet" ; 
-
+: opc-57 ( eor.dily )  mode.dily eor-core ; 
 : opc-58 ( cli )  i-flag clear ;  
 : opc-59 ( eor.y )  mode.y eor-core ; 
 : opc-5A ( phy )  Y @ push.xy ; 
@@ -944,12 +951,9 @@ cr .( Defining opcode routines ... )
 : opc-94 ( sty.dx )  Y @  mode.dx store.xy ; 
 : opc-95 ( sta.dx )  C> mode.dx store.a ; 
 : opc-96 ( stx.dy )  X @  mode.dy store.xy ; 
-
-: opc-97 ( sta.dily )   ." 97 not coded yet" ; 
-
+: opc-97 ( sta.dily )  C> mode.dily store.a ;  
 : opc-98 ( tya )  Y @  >C check-NZ.a ; 
-
-: opc-99 ( sta.y )   ." 99 not coded yet" ; 
+: opc-99 ( sta.y )  C> mode.y store.a ; 
 
 \ Does not alter flags; compare TCS 
 : opc-9A ( txs ) 
@@ -986,9 +990,7 @@ cr .( Defining opcode routines ... )
 : opc-B4 ( ldy.dx )  mode.dx ldy-core ; 
 : opc-B5 ( lda.dx )  mode.dx lda-core ;
 : opc-B6 ( ldx.dy )  mode.dy ldx-core ; 
-
-: opc-B7 ( lda.dily )  ." B7 not coded yet" ; 
-
+: opc-B7 ( lda.dily )  mode.dily lda-core ; 
 : opc-B8 ( clv ) v-flag clear ; 
 : opc-B9 ( lda.y )  mode.y fetch.a check-NZ.a ;
 : opc-BA ( tsx )  S @  xy16flag clear? if mask8 then  X !  check-NZ.x ;  
@@ -997,10 +999,8 @@ cr .( Defining opcode routines ... )
 : opc-BD ( lda.x )  mode.x lda-core ;
 : opc-BE ( ldx.y )  mode.y ldx-core ; 
 : opc-BF ( lda.lx )  mode.lx lda-core ;
-
-: opc-C0 ( cpy.# )   ." C0 not coded yet" ; 
-
-: opc-C1 ( cmp.dxi )  C> mode.dxi fetch.a cmp.a ; 
+: opc-C0 ( cpy.# )  Y @  mode.imm cpxy-core ; 
+: opc-C1 ( cmp.dxi )  C> mode.dxi cmp-core ; 
 
 : opc-C2 ( rep ) \ TODO crude testing version, complete this for all flags
    cr ." WARNING: REP is incomplete, works only on m and x flags" cr
@@ -1010,49 +1010,46 @@ cr .( Defining opcode routines ... )
    dup  30 = if a:16 xy:16  x-flag clear  m-flag clear  then then then drop 
    PC+1 ; 
 
-: opc-C3 ( cmp.s )  C> mode.s fetch.a cmp.a ; 
-
-: opc-C4 ( cpy.d )   ." C4 not coded yet" ; 
-
-: opc-C5 ( cmp.d )   C> mode.d fetch.a cmp.a ;
+: opc-C3 ( cmp.s )  C> mode.s cmp-core ; 
+: opc-C4 ( cpy.d )  Y @  mode.d cpxy-core ; 
+: opc-C5 ( cmp.d )   C> mode.d cmp-core ;
 : opc-C6 ( dec.d )  mode.d dec.mem ;
-: opc-C7 ( cmp.dil )  C> mode.dil fetch.a cmp.a ;  
+: opc-C7 ( cmp.dil )  C> mode.dil cmp-core ;  
 : opc-C8 ( iny )  Y @  1+  mask.xy  Y !  check-NZ.y ;
-: opc-C9 ( cmp.# ) C> mode.imm fetch.a cmp.a PC+a ; 
+: opc-C9 ( cmp.# ) C> mode.imm cmp-core PC+a ; 
 : opc-CA ( dex )  X @  1- mask.xy  X !  check-NZ.x ;
 
 : opc-CB ( wai ) \ TODO crude testing version, complete this for i-flag
    cr cr ." *** WAI instruction, halting processor ***" .state quit 
    cr ." WARNING: WAI not fully implemented" ; 
 
-: opc-CC ( cpy )   ." CC not coded yet" ; 
-: opc-CD ( cmp )  ." CD not coded yet" ; 
+: opc-CC ( cpy )  Y @  mode.abs.DBR cpxy-core ; 
+
+: opc-CD ( cmp )  C> mode.abs.DBR cmp-core ; 
 
 : opc-CE ( dec )  mode.abs.DBR dec.mem ;
-: opc-CF ( cmp.l )  C> mode.l fetch.a cmp.a ; 
+: opc-CF ( cmp.l )  C> mode.l cmp-core ; 
 : opc-D0 ( bne )  z-flag clear? branch-if-true ; 
-: opc-D1 ( cmp.diy )  C> mode.diy fetch.a cmp.a ; 
-: opc-D2 ( cmp.di )  C> mode.di fetch.a cmp.a ; 
-: opc-D3 ( cmp.siy )  C> mode.siy fetch.a cmp.a ; 
+: opc-D1 ( cmp.diy )  C> mode.diy cmp-core ; 
+: opc-D2 ( cmp.di )  C> mode.di cmp-core ; 
+: opc-D3 ( cmp.siy )  C> mode.siy cmp-core ; 
 : opc-D4 ( phe.d )  mode.d fetch16 push16 ; \ pp. 169, 373
-: opc-D5 ( cmp.dx )  C> mode.dx fetch.a cmp.a PC+a ; 
+: opc-D5 ( cmp.dx )  C> mode.dx cmp-core ; 
 : opc-D6 ( dec.dx )  mode.dx dec.mem ; 
-
-: opc-D7 ( cmp.dily )  ." D7 not coded yet" ; 
-
+: opc-D7 ( cmp.dily )  C> mode.dily cmp-core ; 
 : opc-D8 ( cld )  d-flag clear ;  
-: opc-D9 ( cmp.y )  C> mode.y fetch.a cmp.a ; 
+: opc-D9 ( cmp.y )  C> mode.y cmp-core ; 
 : opc-DA ( phx )  X @  push.xy ;
 
 : opc-DB ( stp )  cr cr ." *** STP instruction, halting processor" cr
    .state quit ; 
 
 : opc-DC ( jmp.il )  mode.il 24>PC24! ; 
-: opc-DD ( cmp.x )  C> mode.x fetch.a cmp.a ;  
-: opc-DE ( dec.x )   mode.x dec.mem ; 
-: opc-DF ( cmp.lx ) C> mode.lx fetch.a cmp.a ;  
+: opc-DD ( cmp.x )  C> mode.x cmp-core ;  
+: opc-DE ( dec.x )  mode.x dec.mem ; 
+: opc-DF ( cmp.lx ) C> mode.lx cmp-core ;  
+: opc-E0 ( cpx.# )  X @  mode.imm cpxy-core ; 
 
-: opc-E0 ( cpx.# )   ." E0 not coded yet" ; 
 : opc-E1 ( sbc.dxi )  ." E1 not coded yet" ; 
 
 : opc-E2 ( sep ) \ TODO crude testing version, complete this for all flags
@@ -1064,7 +1061,9 @@ cr .( Defining opcode routines ... )
    PC+1 ; 
 
 : opc-E3 ( sbc.s )   ." E3 not coded yet" ; 
-: opc-E4 ( cpx.d )   ." E4 not coded yet" ; 
+
+: opc-E4 ( cpx.d )  X @  mode.d cpxy-core ; 
+
 : opc-E5 ( sbc.d )   ." E5 not coded yet" ; 
 
 : opc-E6 ( inc.d )  mode.d inc.mem ; 
@@ -1076,12 +1075,14 @@ cr .( Defining opcode routines ... )
 : opc-E9 ( sbc.# )   ." E9 not coded yet" ; 
 
 : opc-EA ( nop ) ;
+
 \ N and Z depend only on value in (new) A, regardless if the register is in 8 or 
-\ 16 bit mode 
+\ 16 bit mode # TODO rewrite with C> etc
 : opc-EB ( xba )  
    C @ dup  mask8  8 lshift  swap mask.b  8 rshift  dup check-NZ.8  or  C ! ; 
 
-: opc-EC ( cpx )   ." EC not coded yet" ; 
+: opc-EC ( cpx )  X @ mode.abs.DBR cpxy-core ; 
+
 : opc-ED ( sbc )   ." ED not coded yet" ; 
 
 : opc-EE ( inc )  mode.abs.DBR inc.mem ; 

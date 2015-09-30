@@ -35,7 +35,8 @@ hex
 \ ---- HARDWARE: CPU ----
 cr .( Setting up CPU ... ) 
 
-\ Names follow the convention from the WDC data sheet
+\ Names follow the convention from the WDC data sheet. We use uppercase letters.
+\ Note P is generated, not stored, as are A and the B register
 variable PC    \ Program counter (16 bit) 
 variable C     \ C register (16 bit); MSB is B, LSB is A
 variable X     \ X register (8\16 bit)
@@ -205,7 +206,9 @@ cr .( Setting up flag routines ... )
 : clear  ( addr -- )  false swap ! ; 
 
 \ All 65816 are fully-formed Forth flags, that is, one cell wide.  There is no
-\ flag in bit 5 in emulation mode
+\ flag in bit 5 in emulation mode. The convention is to use lowercase letters
+\ for the flags to avoid confusion with the register names
+
 create flags
    false , false , false , false , false , false , false , false , 
 
@@ -232,9 +235,10 @@ variable e-flag
 \ These are used to make a flag reflect the set/clear status of a bit in a byte
 \ or word provided. Mask byte or word with AND to isolate single bits and then
 \ use there
-: test&set-C ( u -- )  0<> c-flag ! ; 
-: test&set-N ( u -- )  0<> n-flag ! ; 
-: test&set-V ( u -- )  0<> v-flag ! ; 
+: test&set-c ( u -- )  0<> c-flag ! ; 
+: test&set-n ( u -- )  0<> n-flag ! ; 
+: test&set-v ( u -- )  0<> v-flag ! ; 
+: test&set-z ( u -- )  0<> z-flag ! ; 
 
 defer mask-N.a
 : mask-N.8  ( u8 -- u8 ) 80 and ; 
@@ -264,8 +268,8 @@ defer check-C.a  defer check-C.x  defer check-C.y
 
 \ Negative Flag
 defer check-N.a  defer check-N.x  defer check-N.y
-: check-N8 ( n -- )  80 and  test&set-N ;
-: check-N16 ( n -- )  8000 and  test&set-N ;
+: check-N8 ( n -- )  80 and  test&set-n ;
+: check-N16 ( n -- )  8000 and  test&set-n ;
 
 \ MASKs are paranoid
 : check-N.a8 ( -- )  A check-N8 ;
@@ -277,7 +281,7 @@ defer check-N.a  defer check-N.x  defer check-N.y
 
 \ Zero Flag
 defer check-Z.a
-: check-Z ( n -- )  test&set-Z ; 
+: check-Z ( n -- )  test&set-z ; 
 
 : check-Z.a8 ( -- )  A check-Z ;
 : check-Z.a16 ( -- )  C @  check-Z ; 
@@ -296,6 +300,48 @@ defer check-NZ.TOS   \ Used for LSR and other instructions that don't work on C
 : check-NZC.y ( -- )  check-N.y  check-Z.y  check-C.y ; 
  
 
+\ --- BCD ROUTINES ---
+cr .( Setting up BCD routines ...) 
+
+\ BCD is required for decimal mode addition and subtraction operations. It is
+\ also a pain in the rear. See http://www.6502.org/tutorials/decimal_mode.html
+\ and https://en.wikipedia.org/wiki/Binary-coded_decimal#Addition_with_BCD for
+\ the background for these routines
+
+\ -- 8 bits -- 
+
+: byte>nibbles ( u -- nh nl )  dup 0f0 and  4 rshift  swap 0f and ; 
+: nibbles>byte ( nh nl -- u )  swap 4 lshift or ; 
+
+\ Split up two bytes and interweave their nibbles so they are ready for addition
+: nibbleweave ( u1 u2 -- n2h n1h n1l n2l)  byte>nibbles rot byte>nibbles rot ;
+
+\ Add two nibbles in BCD style. Intialize the carry with zero. Results in the
+\ sum of the two nibbles (nr) and the "carry nibble" (nc) that is reused
+: bcd-add-nibble ( n1 n2 c -- nc nr)  + +  dup 9 > if 6 + then  byte>nibbles ; 
+
+\ Add two bytes BCD style, including the c-flag. We use this routine for the
+\ 8-bit ADC routine when the d-flag ist set
+: bcd-add-byte ( u1 u2 -- ur )
+   nibbleweave  c-flag @  1 and 
+   bcd-add-nibble >r  ( n2h n1h nc -- R: nl )
+   bcd-add-nibble r> nibbles>byte    ( nc nr )
+   swap test&set-c ; 
+   
+\ -- 16 bits -- 
+
+: word>bytes ( w -- uh ul )  dup 0ff00 and  8 rshift  swap 0ff and ; 
+: bytes>word ( uh ul -- w )  swap 8 lshift  or ; 
+
+\ Split up two words and interweave their words so they are ready for addition
+: byteweave ( w1 w2 -- u2h u1h u1l u2l)  word>bytes rot word>bytes rot ;
+
+\ Add two words BCD style, including the c-flag. We use this routine for the
+\ 16-bit ADC routine when the d-flag ist set
+: bcd-add-word ( w1 w2 -- w2 ) 
+   byteweave  bcd-add-byte >r  bcd-add-byte r>  bytes>word ; 
+
+
 \ ----- ALU COMMANDS ---- 
 
 \ TODO Combine these words once we know what we are doing
@@ -313,9 +359,7 @@ defer ora.a
 : ora16 ( u16 -- ) mask16  C @  or  C ! ; 
 
 \ This works for both 8 and 16 bit accumulators
-: lsr ( u -- u)  dup  1 and 
-   0= if c-flag clear else c-flag set then   \ TODO make this a separate word
-   1 rshift ; 
+: lsr ( u -- u)  dup  1 and  test&set-c  1 rshift ; 
 
 
 \ TODO Combine these words once we know what we are doing
@@ -344,8 +388,9 @@ defer dec.mem
 : dec16.mem  ( 65addr -- )  
    dup fetch16 1- mask16  dup check-NZ.16  swap store16 ; 
 
-\ Compare instructions 
-\
+
+\ --- COMPARE INSTRUCTIONS ---
+
 \ See http://www.6502.org/tutorials/compare_beyond.html for discussion TODO see
 \ if we need these or if we can use the CHECK-XX routines directly for the CMP
 \ instructions
@@ -358,7 +403,6 @@ cr .( Setting up branching ...)
 
 : takebranch ( -- )  next1byte signextend 1+  PC @ +  PC ! ;
 : branch-if-true ( f -- )  if takebranch else PC+1 then ; 
-
 
 \ --- STACK STUFF ----
 cr .( Setting up stack ...)

@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 30. Sep 2015 
+\ This version: 01. Oct 2015 
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version pre-ALPHA  30. Sep 2015)  
+cr .( Version pre-ALPHA  01. Oct 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -162,7 +162,7 @@ defer fetch.a  defer fetch.xy
 \ store words should be based on it
 : fetch8  ( 65addr24 -- u8 )  
    special-fetch?  dup 0= if     ( 65addr24 0|xt)
-      drop  memory +  c@  else   \ C@ means no MASK is required
+      drop  memory +  c@  else   \ C@ means no MASK8 is required
       nip execute  then ; 
 : fetch16  ( 65addr24 -- u16 )  dup fetch8  swap 1+ fetch8  lsb/msb>16 ; 
 : fetch24  ( 65addr24 -- u24 )  
@@ -238,7 +238,7 @@ variable e-flag
 : test&set-c ( u -- )  0<> c-flag ! ; 
 : test&set-n ( u -- )  0<> n-flag ! ; 
 : test&set-v ( u -- )  0<> v-flag ! ; 
-: test&set-z ( u -- )  0<> z-flag ! ; 
+: test&set-z ( u -- )  0= z-flag ! ; 
 
 defer mask-N.a
 : mask-N.8  ( u8 -- u8 ) 80 and ; 
@@ -342,53 +342,6 @@ cr .( Setting up BCD routines ...)
    byteweave  bcd-add-byte >r  bcd-add-byte r>  bytes>word ; 
 
 
-\ ----- ALU COMMANDS ---- 
-
-\ TODO Combine these words once we know what we are doing
-
-defer and.a
-: and8  ( u8 -- ) mask8 A and  A>C! ;  \ A is word, not variable 
-: and16 ( u16 -- ) mask16  C @  and  C ! ; 
-
-defer eor.a
-: eor8  ( u8 -- ) mask8 A xor  A>C! ;
-: eor16 ( u16 -- ) mask16  C @  xor  C ! ; 
-
-defer ora.a
-: ora8  ( u8 -- ) mask8 A or  A>C! ;
-: ora16 ( u16 -- ) mask16  C @  or  C ! ; 
-
-\ This works for both 8 and 16 bit accumulators
-: lsr ( u -- u)  dup  1 and  test&set-c  1 rshift ; 
-
-
-\ TODO Combine these words once we know what we are doing
-
-\ INC for Accumulator. Note we can't use INC.A because this is the name of the 
-\ the 65816 instruction, which would be confusing 
-defer inc.accu 
-: inc8  ( -- ) A 1+ mask8 dup check-NZ.8 A>C! ; 
-: inc16  ( -- ) C @  1+ mask16 dup check-NZ.16  C ! ; 
-
-\ DEC for Accumulator. Note we can't use DEC.A because this is the name of the 
-\ the 65816 instruction, which would be confusing 
-defer dec.accu 
-: dec8  ( -- ) A 1- mask8 dup check-NZ.8 A>C! ; 
-: dec16  ( -- ) C @  1- mask16 dup check-NZ.16  C ! ; 
-
-\ Used for memory, not Accumulator, but affected by size of Accumulator
-defer inc.mem  
-: inc8.mem  ( 65addr -- )  dup fetch8 1+ mask8  dup check-NZ.8  swap store8 ; 
-: inc16.mem  ( 65addr -- )  
-   dup fetch16 1+ mask16  dup check-NZ.16  swap store16 ; 
-
-\ Used for memory, not Accumulator, but affected by size of Accumulator
-defer dec.mem  
-: dec8.mem  ( 65addr -- )  dup fetch8 1- mask8  dup check-NZ.8  swap store8 ; 
-: dec16.mem  ( 65addr -- )  
-   dup fetch16 1- mask16  dup check-NZ.16  swap store16 ; 
-
-
 \ --- COMPARE INSTRUCTIONS ---
 
 \ See http://www.6502.org/tutorials/compare_beyond.html for discussion TODO see
@@ -448,13 +401,6 @@ variable xy16flag  xy16flag clear
    ['] check-N.a16 is check-N.a
    ['] check-Z.a16 is check-Z.a
    ['] check-NZ.8 is check-NZ.TOS
-   ['] and16 is and.a
-   ['] eor16 is eor.a
-   ['] ora16 is ora.a
-   ['] inc16 is inc.accu
-   ['] dec16 is dec.accu
-   ['] inc16.mem is inc.mem
-   ['] dec16.mem is dec.mem
    ['] cmp16 is cmp.a
    ['] S++16 is S++.a
    ['] S--16 is S--.a
@@ -474,13 +420,6 @@ variable xy16flag  xy16flag clear
    ['] check-N.a8 is check-N.a
    ['] check-Z.a8 is check-Z.a
    ['] check-NZ.8 is check-NZ.TOS
-   ['] and8 is and.a
-   ['] eor8 is eor.a
-   ['] ora8 is ora.a
-   ['] inc8 is inc.accu
-   ['] dec8 is dec.accu 
-   ['] inc8.mem is inc.mem
-   ['] dec8.mem is dec.mem
    ['] cmp8 is cmp.a
    ['] S++8 is S++.a
    ['] S--8 is S--.a
@@ -764,21 +703,28 @@ cr .( Creating output functions ...)
    10 +loop cr ; 
 
 
-\ ---- OPCODE HELPER ROUTINES
+\ ---- OPCODE CORE ROUTINES ----
 
-\ These combine sequences that repeat in the opcodes to save space and make
-\ corrections easier
+\ These work in both 8- and 16-bit modes
+: and-core ( 65addr -- )  fetch.a mask.a C> and >C check-NZ.a ;
+: eor-core ( 65addr -- )  fetch.a mask.a C> xor >C check-NZ.a ; 
+: ora-core ( 65addr -- )  fetch.a mask.a C> or >C check-NZ.a ; 
 
-: and-core ( 65addr -- )  fetch.a and.a check-NZ.a ;
-: eor-core ( 65addr -- )  fetch.a eor.a check-NZ.a ; 
-: ora-core ( 65addr -- )  fetch.a ora.a check-NZ.a ; 
-
-: lsr-core ( 65addr -- )  dup fetch.a lsr tuck swap store.a check-NZ.TOS ; 
+\ lsr-core is used for memory manipulation, not of accumlator
+: lsr-core ( 65addr -- )  dup fetch.a  dup 1 and test&set-c  
+   1 rshift tuck swap store.a check-NZ.TOS ; 
 
 : bit-core ( 65addr -- ) fetch.a
-   dup mask-N.a 0= if n-flag clear else n-flag set then
-   dup mask-V.a 0= if v-flag clear else v-flag set then
+   dup mask-N.a test&set-n  dup mask-V.a test&set-v
    C> and check-Z ;  
+
+\ INC and DEC for the Accumulator
+: inc.accu ( -- ) C> 1+ mask.a dup check-NZ.a >C ; 
+: dec.accu ( -- ) C> 1- mask.a dup check-NZ.a >C ; 
+
+\ INC and DEC for memory
+: inc.mem  ( 65addr -- ) dup fetch.a 1+ mask.a dup check-NZ.TOS swap store.a ; 
+: dec.mem  ( 65addr -- ) dup fetch.a 1- mask.a dup check-NZ.TOS swap store.a ; 
 
 : cmp-core ( u 65addr -- ) fetch.a cmp.a ; 
 : cpxy-core ( u 65addr -- ) fetch.xy cmp.xy ; 
@@ -867,7 +813,6 @@ cr .( Defining opcode routines ... )
 
 : opc-2A ( rol )   ." 2A not coded yet" ; 
 
-\ Affects N and Z, is always 16 bit
 : opc-2B ( pld )  pull16 dup check-Z dup check-N16  D ! ;
 : opc-2C ( bit )  mode.abs.DBR bit-core ;  
 : opc-2D ( and )  mode.abs.DBR and-core ; 
@@ -875,7 +820,6 @@ cr .( Defining opcode routines ... )
 : opc-2E ( rol )   ." 2E not coded yet" ; 
 
 : opc-2F ( and.l )  mode.l and-core ; 
-
 : opc-30 ( bmi )  n-flag set? branch-if-true ; 
 : opc-31 ( and.diy )   mode.diy and-core ;
 : opc-32 ( and.di )  mode.di and-core ; 
@@ -889,8 +833,6 @@ cr .( Defining opcode routines ... )
 : opc-38 ( sec )  c-flag set ;  
 : opc-39 ( and.y )  mode.y and-core ; 
 : opc-3A ( dec.a )  dec.accu ;
-
-\ Assumes N affected by 16th bit in all modes
 : opc-3B ( tsc )  S @  mask16 check-NZ.a ; 
 : opc-3C ( bit.x )  mode.x bit-core ; 
 : opc-3D ( and.x )   mode.x and-core ; 
@@ -914,11 +856,11 @@ cr .( Defining opcode routines ... )
 : opc-47 ( eor.dil )  mode.dil eor-core ;  
 : opc-48 ( pha )  C> push.a ; 
 : opc-49 ( eor.# )  mode.imm eor-core PC+a ;
-: opc-4A ( lsr.a ) C> lsr >C check-NZ.a ; 
+: opc-4A ( lsr.a )  C>  dup 1 and test&set-c  1 rshift  >C check-NZ.a ; 
 : opc-4B ( phk )  PBR @  push8 ;
 : opc-4C ( jmp )  next2bytes  PC ! ;
 : opc-4D ( eor )  mode.abs.DBR eor-core ; 
-: opc-4E ( lsr )  mode.abs.DBR dup fetch.a lsr tuck swap store.a check-NZ.TOS ; 
+: opc-4E ( lsr )  mode.abs.DBR lsr-core ; 
 : opc-4F ( eor.l )  mode.l eor-core ; 
 : opc-50 ( bvc )  v-flag clear? branch-if-true ; 
 : opc-51 ( eor.diy )  mode.diy eor-core ;  
@@ -1082,9 +1024,7 @@ cr .( Defining opcode routines ... )
    cr ." WARNING: WAI not fully implemented" ; 
 
 : opc-CC ( cpy )  Y @  mode.abs.DBR cpxy-core ; 
-
 : opc-CD ( cmp )  C> mode.abs.DBR cmp-core ; 
-
 : opc-CE ( dec )  mode.abs.DBR dec.mem ;
 : opc-CF ( cmp.l )  C> mode.l cmp-core ; 
 : opc-D0 ( bne )  z-flag clear? branch-if-true ; 
@@ -1099,7 +1039,7 @@ cr .( Defining opcode routines ... )
 : opc-D9 ( cmp.y )  C> mode.y cmp-core ; 
 : opc-DA ( phx )  X @  push.xy ;
 
-: opc-DB ( stp )  cr cr ." *** STP instruction, halting processor" cr
+: opc-DB ( stp )  cr cr ." *** STP instruction, halting processor ***" cr
    .state quit ; 
 
 : opc-DC ( jmp.il )  mode.il 24>PC24! ; 

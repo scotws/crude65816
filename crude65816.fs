@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 27. Sep 2015 
+\ This version: 30. Sep 2015 
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version pre-ALPHA  27. Sep 2015)  
+cr .( Version pre-ALPHA  30. Sep 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -197,7 +197,7 @@ defer store.a   defer store.xy
 
 \ ---- FLAGS ----
 cr .( Setting up flag routines ... ) 
-\
+
 \ make flag routines easier for humans to work with 
 : set?  ( addr -- f )  @ ;  
 : clear?  ( addr -- f )  @ invert ;
@@ -229,12 +229,19 @@ variable e-flag
 \ TODO see what actually happens during these switches
 : unused-flag ( -- addr ) flags 2 cells + ; 
 
+\ These are used to make a flag reflect the set/clear status of a bit in a byte
+\ or word provided. Mask byte or word with AND to isolate single bits and then
+\ use there
+: test&set-C ( u -- )  0<> c-flag ! ; 
+: test&set-N ( u -- )  0<> n-flag ! ; 
+: test&set-V ( u -- )  0<> v-flag ! ; 
+
 defer mask-N.a
 : mask-N.8  ( u8 -- u8 ) 80 and ; 
 : mask-N.16 ( u16 -- u16 ) 8000 and ; 
 
 defer mask-V.a 
-: mask-V.8  ( u8 -- u8 ) 40 and ; 
+: mask-V.8 ( u8 -- u8 ) 40 and ; 
 : mask-V.16 ( u16 -- u16 ) 4000 and ; 
 
 \ ---- TEST AND SET FLAGS ----
@@ -257,8 +264,8 @@ defer check-C.a  defer check-C.x  defer check-C.y
 
 \ Negative Flag
 defer check-N.a  defer check-N.x  defer check-N.y
-: check-N8 ( n -- )  80 and  if n-flag set  else  n-flag clear  then ;
-: check-N16 ( n -- )  8000 and  if n-flag set  else  n-flag clear  then ;
+: check-N8 ( n -- )  80 and  test&set-N ;
+: check-N16 ( n -- )  8000 and  test&set-N ;
 
 \ MASKs are paranoid
 : check-N.a8 ( -- )  A check-N8 ;
@@ -270,7 +277,7 @@ defer check-N.a  defer check-N.x  defer check-N.y
 
 \ Zero Flag
 defer check-Z.a
-: check-Z ( n -- )  if  z-flag clear  else  z-flag set  then ; 
+: check-Z ( n -- )  test&set-Z ; 
 
 : check-Z.a8 ( -- )  A check-Z ;
 : check-Z.a16 ( -- )  C @  check-Z ; 
@@ -721,6 +728,7 @@ cr .( Creating output functions ...)
 : and-core ( 65addr -- )  fetch.a and.a check-NZ.a ;
 : eor-core ( 65addr -- )  fetch.a eor.a check-NZ.a ; 
 : ora-core ( 65addr -- )  fetch.a ora.a check-NZ.a ; 
+
 : lsr-core ( 65addr -- )  dup fetch.a lsr tuck swap store.a check-NZ.TOS ; 
 
 : bit-core ( 65addr -- ) fetch.a

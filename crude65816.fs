@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 01. Oct 2015 
+\ This version: 02. Oct 2015 
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version pre-ALPHA  01. Oct 2015)  
+cr .( Version pre-ALPHA  02. Oct 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -56,7 +56,7 @@ defer mask.a  defer mask.xy
 : mask8 ( u -- u8 ) 0ff and ; 
 : mask16 ( u -- u16 ) 0ffff and ; 
 : mask24 ( u -- u24 ) 0ffffff and ; 
-: mask.b ( u -- u16 ) 0ff00 and ; \ used to protect B  
+: mask.B ( u -- u16 ) 0ff00 and ; \ used to protect B  TODO really need this?
 
 \ return least, most significant byte of 16-bit number
 : lsb ( u -- u8 )  mask8 ;
@@ -205,7 +205,7 @@ cr .( Setting up flag routines ... )
 : set  ( addr -- )  true swap ! ; 
 : clear  ( addr -- )  false swap ! ; 
 
-\ All 65816 are fully-formed Forth flags, that is, one cell wide.  There is no
+\ All 65816 are fully-formed Forth flags, that is, one cell wide. There is no
 \ flag in bit 5 in emulation mode. The convention is to use lowercase letters
 \ for the flags to avoid confusion with the register names
 
@@ -251,14 +251,16 @@ defer mask-V.a
 \ ---- TEST AND SET FLAGS ----
 
 \ The basic, unspecific routines consume TOS, the derived functions do not
+\ TODO THIS IS A MESS, REWRITE
 \ TODO Rewrite and combine these once we know what we are doing 
-\ TODO Change these to use mask-N 
+\ TODO Rewrite these so they all consume or don't consume TOS
 
 \ Carry Flag
 defer check-C.a  defer check-C.x  defer check-C.y
 : check-C  ( n n -- )  < if  c-flag clear  else  c-flag set  then ; 
 
 \ MASKs are paranoid 
+\ TODO Replace with versions that use C>
 : check-C.a8  ( n8 -- )  A  check-C ;
 : check-C.a16  ( n16 -- )  C @  mask16 check-C ; 
 : check-C.x8  ( n8 -- )  X @  mask8 check-C ; 
@@ -268,8 +270,8 @@ defer check-C.a  defer check-C.x  defer check-C.y
 
 \ Negative Flag
 defer check-N.a  defer check-N.x  defer check-N.y
-: check-N8 ( n -- )  80 and  test&set-n ;
-: check-N16 ( n -- )  8000 and  test&set-n ;
+: check-N8 ( n -- )  mask-N.8  test&set-n ;
+: check-N16 ( n -- )  mask-N.16 test&set-n ;
 
 \ MASKs are paranoid
 : check-N.a8 ( -- )  A check-N8 ;
@@ -710,13 +712,18 @@ cr .( Creating output functions ...)
 : eor-core ( 65addr -- )  fetch.a mask.a C> xor >C check-NZ.a ; 
 : ora-core ( 65addr -- )  fetch.a mask.a C> or >C check-NZ.a ; 
 
-\ lsr-core is used for memory manipulation, not of accumlator
-: lsr-core ( 65addr -- )  dup fetch.a  dup 1 and test&set-c  
-   1 rshift tuck swap store.a check-NZ.TOS ; 
+\ asl-core is used for all, asl-mem for memory shifts 
+: asl-core ( n -- n )  dup mask-N.a test&set-c 1 lshift ; 
+: asl-mem ( addr -- ) dup fetch.a asl-core dup check-NZ.TOS swap store.a ; 
 
-: bit-core ( 65addr -- ) fetch.a
-   dup mask-N.a test&set-n  dup mask-V.a test&set-v
-   C> and check-Z ;  
+\ lsr-core is used for all, lsr-mem for memory shifts
+: lsr-core ( n -- n ) dup 1 and test&set-c 1 rshift ; 
+: lsr-mem ( addr -- ) dup fetch.a lsr-core dup check-NZ.TOS swap store.a ; 
+
+: bit-core ( 65addr -- ) fetch.a 
+   dup mask-N.a test&set-n  
+   dup mask-V.a test&set-v 
+   C> and  check-Z ;  
 
 \ INC and DEC for the Accumulator
 : inc.accu ( -- ) C> 1+ mask.a dup check-NZ.a >C ; 
@@ -750,23 +757,17 @@ cr .( Defining opcode routines ... )
 : opc-04 ( tsb.d )  ." 04 not coded yet" ; 
 
 : opc-05 ( ora.d )  mode.d ora-core ; 
-
-: opc-06 ( asl.d )  ." 06 not coded yet" ; 
-
+: opc-06 ( asl.d )  mode.d asl-mem ; 
 : opc-07 ( ora.dil )  mode.dil ora-core ; 
 : opc-08 ( php )  P push8 ; 
 : opc-09 ( ora.# )  mode.imm ora-core PC+a ;
-
-: opc-0A ( asl.a )   ." 0A not coded yet" ; 
-
+: opc-0A ( asl.a )  C> asl-core >C check-NZ.a ;  
 : opc-0B ( phd )  D @  mask16 push16 ;
 
 : opc-0C ( tsb )   ." 0C not coded yet" ; 
 
 : opc-0D ( ora )  mode.abs.DBR ora-core ; 
-
-: opc-0E ( asl )   ." 0E not coded yet" ; 
-
+: opc-0E ( asl )  mode.abs.DBR asl-mem ;  
 : opc-0F ( ora.l )  mode.l ora-core ; 
 : opc-10 ( bpl )  n-flag clear?  branch-if-true ; 
 : opc-11 ( ora.diy )  mode.diy ora-core ; 
@@ -776,9 +777,7 @@ cr .( Defining opcode routines ... )
 : opc-14 ( trb.d )   ." 14 not coded yet" ; 
 
 : opc-15 ( ora.dx )  mode.dx ora-core ; 
-
-: opc-16 ( asl.dx )   ." 16 not coded yet" ; 
-
+: opc-16 ( asl.dx )  mode.dx asl-mem ;  
 : opc-17 ( ora.dily )  mode.dily ora-core ;  
 : opc-18 ( clc )  c-flag clear ; 
 : opc-19 ( ora.y )   mode.y ora-core ; 
@@ -791,9 +790,7 @@ cr .( Defining opcode routines ... )
 : opc-1C ( trb )   ." 1C not coded yet" ; 
 
 : opc-1D ( ora.x )  mode.x ora-core ; 
-
-: opc-1E ( asl.x )  ." 1E not coded yet" ;  
-
+: opc-1E ( asl.x )  mode.x asl-mem ; 
 : opc-1F ( ora.lx )  mode.lx ora-core ; 
 
 \ STEP already increases the PC by one, so we only need to add one byte because
@@ -852,15 +849,15 @@ cr .( Defining opcode routines ... )
 : opc-44 ( mvp )   ." 44 not coded yet" ; 
 
 : opc-45 ( eor.d )  mode.d eor-core ; 
-: opc-46 ( lsr.d )   mode.d lsr-core ; 
+: opc-46 ( lsr.d )   mode.d lsr-mem ; 
 : opc-47 ( eor.dil )  mode.dil eor-core ;  
 : opc-48 ( pha )  C> push.a ; 
 : opc-49 ( eor.# )  mode.imm eor-core PC+a ;
-: opc-4A ( lsr.a )  C>  dup 1 and test&set-c  1 rshift  >C check-NZ.a ; 
+: opc-4A ( lsr.a )  C> lsr-core >C check-NZ.a ;  
 : opc-4B ( phk )  PBR @  push8 ;
 : opc-4C ( jmp )  next2bytes  PC ! ;
 : opc-4D ( eor )  mode.abs.DBR eor-core ; 
-: opc-4E ( lsr )  mode.abs.DBR lsr-core ; 
+: opc-4E ( lsr )  mode.abs.DBR lsr-mem ; 
 : opc-4F ( eor.l )  mode.l eor-core ; 
 : opc-50 ( bvc )  v-flag clear? branch-if-true ; 
 : opc-51 ( eor.diy )  mode.diy eor-core ;  
@@ -870,7 +867,7 @@ cr .( Defining opcode routines ... )
 : opc-54 ( mvn )   ." 54 not coded yet" ; 
 
 : opc-55 ( eor.dx )   mode.dx eor-core ; 
-: opc-56 ( lsr.dx ) mode.dx lsr-core ; 
+: opc-56 ( lsr.dx ) mode.dx lsr-mem ; 
 : opc-57 ( eor.dily )  mode.dily eor-core ; 
 : opc-58 ( cli )  i-flag clear ;  
 : opc-59 ( eor.y )  mode.y eor-core ; 
@@ -878,7 +875,7 @@ cr .( Defining opcode routines ... )
 : opc-5B ( tcd )  C @  mask16 dup check-NZ.a  D ! ;
 : opc-5C ( jmp.l )  next3bytes 24>PC24! ; 
 : opc-5D ( eor.x )  mode.x eor-core ; 
-: opc-5E ( lsr.x )  mode.x lsr-core ; 
+: opc-5E ( lsr.x )  mode.x lsr-mem ; 
 : opc-5F ( eor.lx )  mode.lx eor-core ; 
 : opc-60 ( rts )  pull16 1+  PC ! ;
  
@@ -1077,7 +1074,7 @@ cr .( Defining opcode routines ... )
 \ N and Z depend only on value in (new) A, regardless if the register is in 8 or 
 \ 16 bit mode # TODO rewrite with C> etc
 : opc-EB ( xba )  
-   C @ dup  mask8  8 lshift  swap mask.b  8 rshift  dup check-NZ.8  or  C ! ; 
+   C @ dup  mask8  8 lshift  swap mask.B  8 rshift  dup check-NZ.8  or  C ! ; 
 
 : opc-EC ( cpx )  X @ mode.abs.DBR cpxy-core ; 
 

@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 02. Oct 2015 
+\ This version: 03. Oct 2015 
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version pre-ALPHA  02. Oct 2015)  
+cr .( Version pre-ALPHA  03. Oct 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -27,8 +27,8 @@ cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 cr .( Defining general stuff ...)
 hex
 
-\ TODO make sure we even need any of this 
-400 constant 1k       1k 8 * constant 8k       8k 2* constant 16k
+\ TODO make sure we need anything execpt 16M 
+400 constant 1k       1k 8 * constant 8k      8k 2* constant 16k
 16k 8 * constant 64k  64k 100 * constant 16M
 
 
@@ -36,7 +36,7 @@ hex
 cr .( Setting up CPU ... ) 
 
 \ Names follow the convention from the WDC data sheet. We use uppercase letters.
-\ Note P is generated, not stored, as are A and the B register
+\ P is generated, not stored, as are A and the B register
 variable PC    \ Program counter (16 bit) 
 variable C     \ C register (16 bit); MSB is B, LSB is A
 variable X     \ X register (8\16 bit)
@@ -80,12 +80,12 @@ defer mask.a  defer mask.xy
 : A>C! ( u8 -- )  B  8 lshift or  mask16  C ! ;
 
 \ Take values from TOS and store them in the Accumulator depending on their size
-defer >C 
+defer >C  \ TODO see if this should be >A|C
 : 8>C! ( u8 -- )  mask8  B  8 lshift  or   C ! ; 
 : 16>C! ( u16 -- ) mask16  C ! ; 
 
 \ Takes C and puts it TOS depending on the size of the accumulator
-defer C>
+defer C>  \ TODO see if this should be A|C>
 : C>8 ( -- u8 ) A ; 
 : C>16 ( -- u16 ) C @  mask16 ; \ MASK is paranoid 
 
@@ -706,24 +706,33 @@ cr .( Creating output functions ...)
 
 
 \ ---- OPCODE CORE ROUTINES ----
+\ TODO Rewrite/optimize/refract these
 
-\ These work in both 8- and 16-bit modes
+\ These all work in both 8- and 16-bit modes
 : and-core ( 65addr -- )  fetch.a mask.a C> and >C check-NZ.a ;
 : eor-core ( 65addr -- )  fetch.a mask.a C> xor >C check-NZ.a ; 
 : ora-core ( 65addr -- )  fetch.a mask.a C> or >C check-NZ.a ; 
 
-\ asl-core is used for all, asl-mem for memory shifts 
-: asl-core ( n -- n )  dup mask-N.a test&set-c 1 lshift ; 
-: asl-mem ( addr -- ) dup fetch.a asl-core dup check-NZ.TOS swap store.a ; 
+\ ASL-CORE is used for all, ASL-MEM for memory shifts 
+: asl-core ( u -- u )  dup mask-N.a test&set-c 1 lshift ; 
+: asl-mem ( addr -- )  dup fetch.a asl-core dup check-NZ.TOS swap store.a ; 
 
-\ lsr-core is used for all, lsr-mem for memory shifts
-: lsr-core ( n -- n ) dup 1 and test&set-c 1 rshift ; 
-: lsr-mem ( addr -- ) dup fetch.a lsr-core dup check-NZ.TOS swap store.a ; 
+\ LSR-CORE is used for all, LSR-MEM for memory shifts
+: lsr-core ( u -- u )  dup 1 and test&set-c  1 rshift ; 
+: lsr-mem ( addr -- )  dup fetch.a lsr-core dup check-NZ.TOS swap store.a ; 
+
+\ ROL-CORE is used for all, ROL-MEM for memory shifts
+: rol-core ( u -- u )  
+   c-flag @  1 and swap  dup mask-N.a test&set-c  1 lshift or ;
+: rol-mem ( addr -- )  dup fetch.a rol-core dup check-NZ.TOS swap store.a ; 
+
+\ ROR-CORE is used for all, ROR-MEM for memory shifts
+: ror-core ( u -- u )  
+   c-flag @ mask-N.a swap  dup 1 and test&set-c  1 rshift or ; 
+: ror-mem ( addr -- )  dup fetch.a ror-core dup check-NZ.TOS swap store.a ; 
 
 : bit-core ( 65addr -- ) fetch.a 
-   dup mask-N.a test&set-n  
-   dup mask-V.a test&set-v 
-   C> and  check-Z ;  
+   dup mask-N.a test&set-n  dup mask-V.a test&set-v  C> and  check-Z ;  
 
 \ INC and DEC for the Accumulator
 : inc.accu ( -- ) C> 1+ mask.a dup check-NZ.a >C ; 
@@ -801,21 +810,15 @@ cr .( Defining opcode routines ... )
 : opc-23 ( and.s )  mode.s and-core ; 
 : opc-24 ( bit.d )  mode.d bit-core ; 
 : opc-25 ( and.d )  mode.d and-core ; 
-
-: opc-26 ( rol.d )   ." 26 not coded yet" ; 
-
+: opc-26 ( rol.d )  mode.d rol-mem ;  
 : opc-27 ( and.dil )  mode.dil and-core ;  
 : opc-28 ( plp )  pull8 >P ; 
 : opc-29 ( and.# )  mode.imm and-core PC+a ; 
-
-: opc-2A ( rol )   ." 2A not coded yet" ; 
-
+: opc-2A ( rol.a )  C> rol-core >C check-NZ.a ;  
 : opc-2B ( pld )  pull16 dup check-Z dup check-N16  D ! ;
 : opc-2C ( bit )  mode.abs.DBR bit-core ;  
 : opc-2D ( and )  mode.abs.DBR and-core ; 
-
-: opc-2E ( rol )   ." 2E not coded yet" ; 
-
+: opc-2E ( rol )  mode.abs.DBR rol-mem ; 
 : opc-2F ( and.l )  mode.l and-core ; 
 : opc-30 ( bmi )  n-flag set? branch-if-true ; 
 : opc-31 ( and.diy )   mode.diy and-core ;
@@ -823,9 +826,7 @@ cr .( Defining opcode routines ... )
 : opc-33 ( and.siy )  mode.siy and-core ; 
 : opc-34 ( bit.dx )  mode.dx bit-core ; 
 : opc-35 ( and.dx )  mode.dx and-core ; 
-
-: opc-36 ( rol.dx )  ." 36 not coded yet" ; 
-
+: opc-36 ( rol.dx )  mode.dx rol-mem ; 
 : opc-37 ( and.dily )  mode.dily and-core ; 
 : opc-38 ( sec )  c-flag set ;  
 : opc-39 ( and.y )  mode.y and-core ; 
@@ -833,9 +834,7 @@ cr .( Defining opcode routines ... )
 : opc-3B ( tsc )  S @  mask16 check-NZ.a ; 
 : opc-3C ( bit.x )  mode.x bit-core ; 
 : opc-3D ( and.x )   mode.x and-core ; 
-
-: opc-3E ( rol.x )   ." 3E not coded yet" ; 
-
+: opc-3E ( rol.x )  mode.x rol-mem ; 
 : opc-3F ( and.lx )  mode.lx and-core ; 
 
 : opc-40 ( rti )   ." 40 not coded yet" ; 
@@ -886,19 +885,23 @@ cr .( Defining opcode routines ... )
 : opc-64 ( stz.d )  0 mode.d store.a ; 
 
 : opc-65 ( adc.d )   ." 65 not coded yet" ; 
-: opc-66 ( ror.d )   ." 66 not coded yet" ; 
+
+: opc-66 ( ror.d )  mode.d ror-mem ; 
+
 : opc-67 ( adc.dil )   ." 67 not coded yet" ; 
 
 : opc-68 ( pla )  pull.a >C check-NZ.a ; 
 
 : opc-69 ( adc.# )   ." 69 not coded yet" ; 
-: opc-6A ( ror.a )   ." 6A not coded yet" ; 
 
+: opc-6A ( ror.a )  C> ror-core >C check-NZ.a ;  
 : opc-6B ( rts.l )  pull24 1+  24>PC24! ; 
 : opc-6C ( jmp.i )  mode.i  PC ! ; 
 
 : opc-6D ( adc )   ." 6D not coded yet" ; 
-: opc-6E ( ror )   ." 6E not coded yet" ; 
+
+: opc-6E ( ror )   mode.abs.DBR ror-mem ; 
+
 : opc-6F ( adc.l )   ." 6F not coded yet" ; 
 
 : opc-70 ( bvs )  v-flag set? branch-if-true ;  
@@ -910,7 +913,9 @@ cr .( Defining opcode routines ... )
 : opc-74 ( stz.dx )  0 mode.dx store.a ; 
 
 : opc-75 ( adc.dx)   ." 75 not coded yet" ; 
-: opc-76 ( ror.dx )   ." 76 not coded yet" ; 
+
+: opc-76 ( ror.dx )  mode.dx ror-mem ;
+
 : opc-77 ( adc.dy )   ." 77 not coded yet" ; 
 
 : opc-78 ( sei ) i-flag set ; 
@@ -922,7 +927,9 @@ cr .( Defining opcode routines ... )
 : opc-7C ( jmp.xi )  mode.xi  PC ! ; 
 
 : opc-7D ( adc.x )   ." 7D not coded yet" ; 
-: opc-7E ( ror.x )   ." 7E not coded yet" ; 
+
+: opc-7E ( ror.x )   mode.x ror-mem ; 
+
 : opc-7F ( adc.lx )   ." 7F not coded yet" ; 
 
 : opc-80 ( bra )  takebranch ;

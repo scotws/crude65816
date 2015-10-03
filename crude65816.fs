@@ -229,7 +229,7 @@ variable e-flag
 
 \ We don't use bit 5 in emulation mode, but it looks weird if it is set when we
 \ switch from 16-bit A in native to emulation mode, so we take care of it
-\ TODO see what actually happens during these switches
+\ TODO check hardware to see what actually happens during these switches
 : unused-flag ( -- addr ) flags 2 cells + ; 
 
 \ These are used to make a flag reflect the set/clear status of a bit in a byte
@@ -301,6 +301,11 @@ defer check-NZ.TOS   \ Used for LSR and other instructions that don't work on C
 : check-NZC.x ( -- )  check-N.x  check-Z.x  check-C.x ; 
 : check-NZC.y ( -- )  check-N.y  check-Z.y  check-C.y ; 
  
+\ Routines to find out if addition produced a carry flag
+defer carry?.a
+: carry?.8 ( u -- f )  100 and 0<> ; 
+: carry?.16 ( u -- f ) 10000 and 0<> ; 
+
 
 \ --- BCD ROUTINES ---
 cr .( Setting up BCD routines ...) 
@@ -324,12 +329,13 @@ cr .( Setting up BCD routines ...)
 
 \ Add two bytes BCD style, including the c-flag. We use this routine for the
 \ 8-bit ADC routine when the d-flag ist set
-: bcd-add-byte ( u1 u2 -- ur )
+: bcd-add-bytes ( u1 u2 -- ur )
    nibbleweave  c-flag @  1 and 
    bcd-add-nibble >r  ( n2h n1h nc -- R: nl )
    bcd-add-nibble r> nibbles>byte    ( nc nr )
    swap test&set-c ; 
    
+
 \ -- 16 bits -- 
 
 : word>bytes ( w -- uh ul )  dup 0ff00 and  8 rshift  swap 0ff and ; 
@@ -340,8 +346,8 @@ cr .( Setting up BCD routines ...)
 
 \ Add two words BCD style, including the c-flag. We use this routine for the
 \ 16-bit ADC routine when the d-flag ist set
-: bcd-add-word ( w1 w2 -- w2 ) 
-   byteweave  bcd-add-byte >r  bcd-add-byte r>  bytes>word ; 
+: bcd-add-words ( w1 w2 -- w2 ) 
+   byteweave  bcd-add-bytes >r  bcd-add-bytes r> bytes>word ; 
 
 
 \ --- COMPARE INSTRUCTIONS ---
@@ -411,6 +417,7 @@ variable xy16flag  xy16flag clear
    ['] mask16 is mask.a
    ['] mask-N.16 is mask-N.a
    ['] mask-V.16 is mask-V.a
+   ['] carry?.16 is carry?.a
    a16flag set ; 
 
 : a:8 ( -- )  
@@ -430,6 +437,7 @@ variable xy16flag  xy16flag clear
    ['] mask8 is mask.a
    ['] mask-N.8 is mask-N.a
    ['] mask-V.8 is mask-V.a
+   ['] carry?.8 is carry?.a
    a16flag clear ;
 
 \ Switch X and Y 8<->16 bit (p. 51 in Manual) 
@@ -507,6 +515,7 @@ variable xy16flag  xy16flag clear
 
 \ In native mode, changing m and x flags might change the size of these
 \ registers 
+\ TODO get rid of the IFs 
 \ TODO see if we can use same routine for REP and SEP
 : flag-modeswitch ( -- ) 
    e-flag clear? if
@@ -706,6 +715,7 @@ cr .( Creating output functions ...)
 
 
 \ ---- OPCODE CORE ROUTINES ----
+cr .( Defining core routines for opcodes ) 
 \ TODO Rewrite/optimize/refract these
 
 \ These all work in both 8- and 16-bit modes
@@ -749,9 +759,30 @@ cr .( Creating output functions ...)
 : ldx-core ( 65addr -- )  fetch.xy  X !  check-NZ.x ;
 : ldy-core ( 65addr -- )  fetch.xy  Y !  check-NZ.y ;
 
+\ -- Addition routines -- 
+
+\ Common routine for 8- and 16-bit binary addition
+: adc-bin ( addr -- ) 
+   fetch.a C> +  c-flag @ 1 and +  dup C>  carry?.a test&set-c ; 
+
+\ Routines for 8- and 16-bit BCD addition
+\ TODO see if we can fold this into one routine to simplify table
+: adc-bcd.8 ( addr -- ) fetch.a C> bcd-add-bytes C> ; 
+: adc-bcd.16 ( addr -- ) fetch.a C> bcd-add-words C> ; 
+
+create additions
+   ' adc-bin ,    \ 16 bit binary: D clear, M clear (00) 
+   ' adc-bin ,    \  8 bit binary: D clear, M set (01) 
+   ' adc-bcd.16 , \ 16 bit decimal: D set, M clear (10)
+   ' adc-bcd.8 ,  \  8 bit decimal: D set, M set (11)   
+
+: adc-core ( 65addr -- ) 
+   d-flag @ 2 and  m-flag @ 1 and  or  \ calculate table index 
+   additions +  @ execute ; 
+
 
 \ ---- OPCODE ROUTINES ----
-cr .( Defining opcode routines ... ) 
+cr .( Defining opcode routines themselves ... ) 
 
 \ TODO change BRK so we drop into single-step mode, add stack effects
 : opc-00 ( brk )   cr ." *** BRK encountered, halting CPU (ALPHA only) ***" 
@@ -759,7 +790,7 @@ cr .( Defining opcode routines ... )
 
 : opc-01 ( ora.dxi )  mode.dxi ora-core ; 
 
-: opc-02 ( cop )   ." 02 not coded yet" ; 
+: opc-02 ( cop )  ." 02 not coded yet" ; 
 
 : opc-03 ( ora.s )   mode.s ora-core ; 
 
@@ -840,9 +871,8 @@ cr .( Defining opcode routines ... )
 : opc-40 ( rti )   ." 40 not coded yet" ; 
 
 : opc-41 ( eor.dxi )  mode.dxi eor-core ; 
-
-: opc-42 ( wdm ) cr cr ." WARNING: WDM executed."  PC+1 ; 
-
+: opc-42 ( wdm ) cr cr ." WARNING: WDM executed at" 
+   PBR @ .mask8 space PC @ .mask16  PC+1 ; 
 : opc-43 ( eor.s )  mode.s eor-core ; 
 
 : opc-44 ( mvp )   ." 44 not coded yet" ; 
@@ -877,61 +907,39 @@ cr .( Defining opcode routines ... )
 : opc-5E ( lsr.x )  mode.x lsr-mem ; 
 : opc-5F ( eor.lx )  mode.lx eor-core ; 
 : opc-60 ( rts )  pull16 1+  PC ! ;
- 
-: opc-61 ( adc.dxi )   ." 61 not coded yet" ; 
+: opc-61 ( adc.dxi )  mode.dxi adc-core ; 
+
 : opc-62 ( phe.r )   ." 62 not coded yet" ; 
-: opc-63 ( adc.s )   ." 63 not coded yet" ; 
 
+: opc-63 ( adc.s )  mode.s adc-core ; 
 : opc-64 ( stz.d )  0 mode.d store.a ; 
-
-: opc-65 ( adc.d )   ." 65 not coded yet" ; 
-
+: opc-65 ( adc.d )  mode.d adc-core ;  
 : opc-66 ( ror.d )  mode.d ror-mem ; 
-
-: opc-67 ( adc.dil )   ." 67 not coded yet" ; 
-
+: opc-67 ( adc.dil )  mode.dil adc-core ; 
 : opc-68 ( pla )  pull.a >C check-NZ.a ; 
-
-: opc-69 ( adc.# )   ." 69 not coded yet" ; 
-
+: opc-69 ( adc.# )  mode.imm adc-core ; 
 : opc-6A ( ror.a )  C> ror-core >C check-NZ.a ;  
 : opc-6B ( rts.l )  pull24 1+  24>PC24! ; 
 : opc-6C ( jmp.i )  mode.i  PC ! ; 
-
-: opc-6D ( adc )   ." 6D not coded yet" ; 
-
+: opc-6D ( adc )  mode.abs.DBR adc-core ; 
 : opc-6E ( ror )   mode.abs.DBR ror-mem ; 
-
-: opc-6F ( adc.l )   ." 6F not coded yet" ; 
-
+: opc-6F ( adc.l )  mode.l adc-core ; 
 : opc-70 ( bvs )  v-flag set? branch-if-true ;  
-
-: opc-71 ( adc.diy )   ." 71 not coded yet" ; 
-: opc-72 ( adc.di )   ." 72 not coded yet" ; 
-: opc-73 ( adc.siy )   ." 73 not coded yet" ; 
-
+: opc-71 ( adc.diy )  mode.diy adc-core ; 
+: opc-72 ( adc.di )  mode.di  adc-core ; 
+: opc-73 ( adc.siy )  mode.siy adc-core ; 
 : opc-74 ( stz.dx )  0 mode.dx store.a ; 
-
-: opc-75 ( adc.dx)   ." 75 not coded yet" ; 
-
+: opc-75 ( adc.dx)  mode.dx adc-core ; 
 : opc-76 ( ror.dx )  mode.dx ror-mem ;
-
-: opc-77 ( adc.dy )   ." 77 not coded yet" ; 
-
+: opc-77 ( adc.dily )  mode.dily adc-core ; 
 : opc-78 ( sei ) i-flag set ; 
-
-: opc-79 ( adc.y )   ." 79 not coded yet" ; 
-
+: opc-79 ( adc.y )  mode.y adc-core ; 
 : opc-7A ( ply )  pull.xy  Y !  check-NZ.y ;
 : opc-7B ( tdc )  D @  mask16 dup check-NZ.a >C ; 
 : opc-7C ( jmp.xi )  mode.xi  PC ! ; 
-
-: opc-7D ( adc.x )   ." 7D not coded yet" ; 
-
+: opc-7D ( adc.x )  mode.x adc-core ; 
 : opc-7E ( ror.x )   mode.x ror-mem ; 
-
-: opc-7F ( adc.lx )   ." 7F not coded yet" ; 
-
+: opc-7F ( adc.lx ) mode.lx adc-core ; 
 : opc-80 ( bra )  takebranch ;
 : opc-81 ( sta.dxi )  C> mode.dxi store.a ; 
 : opc-82 ( bra.l )  next2bytes signextend.l  2 +  PC ! ; 
@@ -1188,7 +1196,7 @@ cr .( Setting up interrupts ...)
 
 
 \ ---- START EMULATION ----
-cr .( All done.) cr 
+cr cr .( All done. Bringing up machine.) cr 
 
 \ TODO replace RESET-I with POWERON 
 reset-i 

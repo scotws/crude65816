@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 03. Oct 2015 
+\ This version: 04. Oct 2015 
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version pre-ALPHA  03. Oct 2015)  
+cr .( Version pre-ALPHA  04. Oct 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -280,6 +280,7 @@ defer check-N.a  defer check-N.x  defer check-N.y
 : check-N.x16 ( -- )  X @  mask16 check-N16 ; 
 : check-N.y8 ( -- )  Y @  mask8 check-N8 ; 
 : check-N.y16 ( -- )  Y @ mask16 check-N16 ;   
+
 
 \ Zero Flag
 defer check-Z.a
@@ -763,21 +764,26 @@ cr .( Defining core routines for opcodes )
 
 \ Common routine for 8- and 16-bit binary addition
 : adc-bin ( addr -- ) 
-   fetch.a C> +  c-flag @ 1 and +  dup C>  carry?.a test&set-c ; 
+   fetch.a dup >r  \ save operand for Overflow calculation
+   C>  dup >r      \ save accumulator for Overflow calculation 
+   +  c-flag @ 1 and +  dup >C  carry?.a test&set-c 
+   r> C> or  r> C> or  and  mask-N.a  0<> v-flag ! ;  \ calculate Overflow
 
 \ Routines for 8- and 16-bit BCD addition
+\ WARNING: The v-flag is currently not correctly emulated in decimal mode, see
+\ http://www.6502.org/tutorials/vflag.html for details 
 \ TODO see if we can fold this into one routine to simplify table
-: adc-bcd.8 ( addr -- ) fetch.a C> bcd-add-bytes C> ; 
-: adc-bcd.16 ( addr -- ) fetch.a C> bcd-add-words C> ; 
+: adc-bcd.8 ( addr -- ) fetch.a C> bcd-add-bytes >C ; 
+: adc-bcd.16 ( addr -- ) fetch.a C> bcd-add-words >C ; 
 
 create additions
-   ' adc-bin ,    \ 16 bit binary: D clear, M clear (00) 
-   ' adc-bin ,    \  8 bit binary: D clear, M set (01) 
-   ' adc-bcd.16 , \ 16 bit decimal: D set, M clear (10)
-   ' adc-bcd.8 ,  \  8 bit decimal: D set, M set (11)   
+   ' adc-bin ,    \  8 bit binary:  D clear, a16flag clear (00) 
+   ' adc-bin ,    \ 16 bit binary:  D clear, a16flag set (01) 
+   ' adc-bcd.8 ,  \ 16 bit decimal: D set, a16flag clear (10)
+   ' adc-bcd.16 , \  8 bit decimal: D set, a16flag set (11)   
 
 : adc-core ( 65addr -- ) 
-   d-flag @ 2 and  m-flag @ 1 and  or  \ calculate table index 
+   d-flag @ 2 and  a16flag @ 1 and  or  cells  \ calculate table index 
    additions +  @ execute ; 
 
 
@@ -871,8 +877,8 @@ cr .( Defining opcode routines themselves ... )
 : opc-40 ( rti )   ." 40 not coded yet" ; 
 
 : opc-41 ( eor.dxi )  mode.dxi eor-core ; 
-: opc-42 ( wdm ) cr cr ." WARNING: WDM executed at" 
-   PBR @ .mask8 space PC @ .mask16  PC+1 ; 
+: opc-42 ( wdm ) cr cr ." WARNING: WDM executed at " 
+   PBR @ .mask8  PC @ .mask16  PC+1 ; 
 : opc-43 ( eor.s )  mode.s eor-core ; 
 
 : opc-44 ( mvp )   ." 44 not coded yet" ; 
@@ -917,7 +923,7 @@ cr .( Defining opcode routines themselves ... )
 : opc-66 ( ror.d )  mode.d ror-mem ; 
 : opc-67 ( adc.dil )  mode.dil adc-core ; 
 : opc-68 ( pla )  pull.a >C check-NZ.a ; 
-: opc-69 ( adc.# )  mode.imm adc-core ; 
+: opc-69 ( adc.# )  mode.imm adc-core PC+a ; 
 : opc-6A ( ror.a )  C> ror-core >C check-NZ.a ;  
 : opc-6B ( rts.l )  pull24 1+  24>PC24! ; 
 : opc-6C ( jmp.i )  mode.i  PC ! ; 

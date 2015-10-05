@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 04. Oct 2015 
+\ This version: 05. Oct 2015 
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version pre-ALPHA  04. Oct 2015)  
+cr .( Version pre-ALPHA  05. Oct 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -280,7 +280,6 @@ defer check-N.a  defer check-N.x  defer check-N.y
 : check-N.x16 ( -- )  X @  mask16 check-N16 ; 
 : check-N.y8 ( -- )  Y @  mask8 check-N8 ; 
 : check-N.y16 ( -- )  Y @ mask16 check-N16 ;   
-
 
 \ Zero Flag
 defer check-Z.a
@@ -785,6 +784,9 @@ create additions
 : adc-core ( 65addr -- ) 
    d-flag @ 2 and  a16flag @ 1 and  or  cells  \ calculate table index 
    additions +  @ execute ; 
+
+
+
 
 
 \ ---- OPCODE ROUTINES ----

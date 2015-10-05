@@ -189,8 +189,8 @@ defer store.a   defer store.xy
    store8           ( bank  R: 65addr+2)
    r> store8 ; 
 
-\ Read current bytes in stream. Note we use PBR, not DBR. These do not advance
-\ the PC
+\ Read current bytes in stream, returning them as number. Note we use PBR, not
+\ DBR. These do not advance the PC
 : next1byte ( -- u8 )  PC24 fetch8 ; 
 : next2bytes ( -- u16 )  PC24 fetch16 ; 
 : next3bytes ( -- u24 )  PC24 fetch24 ; 
@@ -986,9 +986,7 @@ cr .( Defining opcode routines themselves ... )
 : opc-5F ( eor.lx )  mode.lx eor-core ; 
 : opc-60 ( rts )  pull16 1+  PC ! ;
 : opc-61 ( adc.dxi )  mode.dxi adc-core ; 
-
-: opc-62 ( phe.r )   ." 62 not coded yet" ; 
-
+: opc-62 ( phe.r )  next2bytes PC @ + push16 PC+2 ; 
 : opc-63 ( adc.s )  mode.s adc-core ; 
 : opc-64 ( stz.d )  0 mode.d store.a ; 
 : opc-65 ( adc.d )  mode.d adc-core ;  

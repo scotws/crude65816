@@ -1,0 +1,10 @@
+List of Sources for 6502/65816 tests 
+Scot W. Stevenson <scot.stevenson@gmail.com>
+First version: 05. Okt 2015
+This version: 05. Okt 2015
+
+
+DECIMAL MODE: 
+http://visual6502.org/wiki/index.php?title=6502DecimalMode (8 bit BCD) 
+
+

@@ -312,29 +312,61 @@ cr .( Setting up BCD routines ...)
 
 \ BCD is required for decimal mode addition and subtraction operations. It is
 \ also a pain in the rear. See http://www.6502.org/tutorials/decimal_mode.html
-\ and https://en.wikipedia.org/wiki/Binary-coded_decimal#Addition_with_BCD for
-\ the background for these routines
+\ and https://en.wikipedia.org/wiki/Binary-coded_decimal for the background on
+\ these routines. Check the Known Issues section of MANUAL.txt for known
+\ problems with these routines
+
+\ TODO We should be able to simplify and condense these once they are very,
+\ very throughly tested
 
 \ -- 8 bits -- 
+
+\ Nine's complement of a nibble, for BCD subtraction
+: 9s-comp ( u -- u ) 9 swap - ; 
 
 : byte>nibbles ( u -- nh nl )  dup 0f0 and  4 rshift  swap 0f and ; 
 : nibbles>byte ( nh nl -- u )  swap 4 lshift or ; 
 
+\ Split up a byte into nibbles that are nine's complement, used for BCD
+\ subtraction 
+: byte>9s-nibbles ( u -- nh nl )
+   dup 0f0 and  4 rshift 9s-comp 
+   swap 0f and 9s-comp ;  
+
 \ Split up two bytes and interweave their nibbles so they are ready for addition
-: nibbleweave ( u1 u2 -- n2h n1h n1l n2l)  byte>nibbles rot byte>nibbles rot ;
+: nibbleweave-add ( u1 u2 -- n2h n1h n1l n2l)  
+   byte>nibbles rot byte>nibbles rot ;
+
+\ Split up two bytes and interweave their nibbles so they are ready for
+\ subtraction (more exactly, addition with nine's complement) 
+: nibbleweave-sub ( u1 u2 -- n1h n2h n1l n2l)  
+   byte>9s-nibbles rot byte>nibbles rot 
+   >r -rot swap rot r> ;   \ order is important for subtraction
 
 \ Add two nibbles in BCD style. Intialize the carry with zero. Results in the
 \ sum of the two nibbles (nr) and the "carry nibble" (nc) that is reused
 : bcd-add-nibble ( n1 n2 c -- nc nr)  + +  dup 9 > if 6 + then  byte>nibbles ; 
 
+\ Add two nibbles in BCD style. Intialize the carry with zero. Results in the
+\ sum of the two nibbles (nr) and the "carry nibble" (nc) that is reused
+: bcd-sub-nibble ( n1 n2 c -- nc nr)  + +  dup 9 > if 6 + then byte>nibbles ; 
+
 \ Add two bytes BCD style, including the c-flag. We use this routine for the
 \ 8-bit ADC routine when the d-flag ist set
 : bcd-add-bytes ( u1 u2 -- ur )
-   nibbleweave  c-flag @  1 and 
+   nibbleweave-add  c-flag @  1 and 
    bcd-add-nibble >r  ( n2h n1h nc -- R: nl )
    bcd-add-nibble r> nibbles>byte    ( nc nr )
    swap test&set-c ; 
-   
+ 
+\ Subtract two bytes BCD style, including the c-flag. We use this routine 
+\ for the 8-bit SBC routine when the d-flag ist set
+: bcd-sub-bytes ( u1 u2 -- ur )
+   swap             \ We fetch the operand before we get the accumulator
+   nibbleweave-sub  c-flag @  1 and 
+   bcd-sub-nibble >r  ( n2h n1h nc -- R: nl )
+   bcd-sub-nibble r>  nibbles>byte    ( nc nr )
+   swap test&set-c ; 
 
 \ -- 16 bits -- 
 
@@ -342,12 +374,22 @@ cr .( Setting up BCD routines ...)
 : bytes>word ( uh ul -- w )  swap 8 lshift  or ; 
 
 \ Split up two words and interweave their words so they are ready for addition
-: byteweave ( w1 w2 -- u2h u1h u1l u2l)  word>bytes rot word>bytes rot ;
+: byteweave-add ( w1 w2 -- u2h u1h u1l u2l)  word>bytes rot word>bytes rot ;
 
 \ Add two words BCD style, including the c-flag. We use this routine for the
 \ 16-bit ADC routine when the d-flag ist set
 : bcd-add-words ( w1 w2 -- w2 ) 
-   byteweave  bcd-add-bytes >r  bcd-add-bytes r> bytes>word ; 
+   byteweave-add  bcd-add-bytes >r  bcd-add-bytes r> bytes>word ; 
+
+\ Split up two words and interweave their words so they are ready for
+\ subtraction (rather, addition with nine's complement) 
+: byteweave-sub ( w1 w2 -- u1h u2h u1l u2l)  
+   word>bytes rot word>bytes -rot swap rot ;  
+\
+\ Subtract two words BCD style, including the c-flag. We use this routine 
+\ for the 16-bit SBC routine when the d-flag ist set
+: bcd-sub-words ( w1 w2 -- w2 ) 
+   byteweave-sub swap bcd-sub-bytes >r swap bcd-sub-bytes r> bytes>word ; 
 
 
 \ --- COMPARE INSTRUCTIONS ---
@@ -761,13 +803,16 @@ cr .( Defining core routines for opcodes )
 
 \ -- Addition routines -- 
 
-\ Common routine for 8- and 16-bit binary addition
-: adc-bin ( addr -- ) 
-   fetch.a dup >r  \ save operand for Overflow calculation
-   C>  dup >r      \ save accumulator for Overflow calculation 
-   +  c-flag @ 1 and +  dup >C  carry?.a test&set-c 
+\ Use this for both ADC and SBC
+: adc-sbc-core ( u -- ) 
+   dup >r      \ save operand for Overflow calculation
+   C>  dup >r  \ save accumulator for Overflow calculation 
+   +  c-flag @ 1 and +  dup >C  carry?.a test&set-c  check-NZ.a
    r> C> or  r> C> or  and  mask-N.a  0<> v-flag ! ;  \ calculate Overflow
 
+\ Common routine for 8- and 16-bit binary addition 
+: adc-bin ( addr -- ) fetch.a adc-sbc-core ; 
+   
 \ Routines for 8- and 16-bit BCD addition
 \ WARNING: The v-flag is currently not correctly emulated in decimal mode, see
 \ http://www.6502.org/tutorials/vflag.html for details 
@@ -786,6 +831,31 @@ create additions
    additions +  @ execute ; 
 
 
+\ --- Subtraction Routines ---
+
+\ The 6502 and 65816 use the c-flag as an inverted borrow
+: invert-borrow ( -- ) c-flag dup @ invert swap ! ; 
+
+\ Common routine for 8- and 16-bit binary subtraction
+: sbc-bin ( addr -- ) fetch.a invert adc-sbc-core invert-borrow ; 
+
+\ Routines for 8- and 16-bit BCD subtraction
+\ WARNING: The v-flag is currently not correctly emulated in decimal mode, see
+\ http://www.6502.org/tutorials/vflag.html for details 
+\ Also see http://visual6502.org/wiki/index.php?title=6502DecimalMode
+\ TODO see if we can fold this into one routine to simplify table
+: sbc-bcd.8 ( addr -- ) fetch.a C> bcd-sub-bytes >C ; 
+: sbc-bcd.16 ( addr -- ) fetch.a C> bcd-sub-words >C ; 
+
+create subtractions
+   ' sbc-bin ,    \  8 bit binary:  D clear, a16flag clear (00) 
+   ' sbc-bin ,    \ 16 bit binary:  D clear, a16flag set (01) 
+   ' sbc-bcd.8 ,  \ 16 bit decimal: D set, a16flag clear (10)
+   ' sbc-bcd.16 , \  8 bit decimal: D set, a16flag set (11)   
+
+: sbc-core ( 65addr -- ) 
+   d-flag @ 2 and  a16flag @ 1 and  or  cells  \ calculate table index 
+   subtractions +  @ execute ; 
 
 
 
@@ -1067,8 +1137,7 @@ cr .( Defining opcode routines themselves ... )
 : opc-DE ( dec.x )  mode.x dec.mem ; 
 : opc-DF ( cmp.lx ) C> mode.lx cmp-core ;  
 : opc-E0 ( cpx.# )  X @  mode.imm cpxy-core ; 
-
-: opc-E1 ( sbc.dxi )  ." E1 not coded yet" ; 
+: opc-E1 ( sbc.dxi )  mode.dxi sbc-core ; 
 
 : opc-E2 ( sep ) \ TODO crude testing version, complete this for all flags
    cr ." WARNING: SEP is incomplete, works only on m and x flags" cr
@@ -1078,20 +1147,13 @@ cr .( Defining opcode routines themselves ... )
    dup  30 = if a:8 xy:8  a16flag set  xy16flag set  then then then drop 
    PC+1 ; 
 
-: opc-E3 ( sbc.s )   ." E3 not coded yet" ; 
-
+: opc-E3 ( sbc.s )  mode.s sbc-core ; 
 : opc-E4 ( cpx.d )  X @  mode.d cpxy-core ; 
-
-: opc-E5 ( sbc.d )   ." E5 not coded yet" ; 
-
+: opc-E5 ( sbc.d )  mode.d sbc-core ; 
 : opc-E6 ( inc.d )  mode.d inc.mem ; 
-
-: opc-E7 ( sbc.dil )   ." E7 not coded yet" ; 
-
+: opc-E7 ( sbc.dil )  mode.dil sbc-core ; 
 : opc-E8 ( inx )  X @  1+  mask.xy  X !  check-NZ.x ;
-
-: opc-E9 ( sbc.# )   ." E9 not coded yet" ; 
-
+: opc-E9 ( sbc.# )  mode.imm sbc-core PC+a ; 
 : opc-EA ( nop ) ;
 
 \ N and Z depend only on value in (new) A, regardless if the register is in 8 or 
@@ -1100,42 +1162,26 @@ cr .( Defining opcode routines themselves ... )
    C @ dup  mask8  8 lshift  swap mask.B  8 rshift  dup check-NZ.8  or  C ! ; 
 
 : opc-EC ( cpx )  X @ mode.abs.DBR cpxy-core ; 
-
-: opc-ED ( sbc )   ." ED not coded yet" ; 
-
+: opc-ED ( sbc )  mode.abs.DBR sbc-core ;  
 : opc-EE ( inc )  mode.abs.DBR inc.mem ; 
-
-: opc-EF ( sbc.l )   ." EF not coded yet" ; 
-
+: opc-EF ( sbc.l )  mode.l sbc-core ;  
 : opc-F0 ( beq )  z-flag set? branch-if-true ; 
-
-: opc-F1 ( sbc.diy )   ." F1 not coded yet" ; 
-: opc-F2 ( sbc.di )   ." F2 not coded yet" ; 
-: opc-F3 ( sbc.siy )   ." F3 not coded yet" ; 
-
+: opc-F1 ( sbc.diy )  mode.diy sbc-core ;  
+: opc-F2 ( sbc.di )  mode.di sbc-core ;  
+: opc-F3 ( sbc.siy )  mode.siy sbc-core ; 
 : opc-F4 ( phe.# )  next2bytes push16 PC+2 ;
-
-: opc-F5 ( sbc.dx )   ." F5 not coded yet" ; 
-
-: opc-F6 ( inc.dx )   mode.dx inc.mem ; 
-
-: opc-F7 ( sbc.dily )   ." F7 not coded yet" ; 
-
+: opc-F5 ( sbc.dx )  mode.dx sbc-core ; 
+: opc-F6 ( inc.dx )  mode.dx inc.mem ; 
+: opc-F7 ( sbc.dily )  mode.dily sbc-core ; 
 : opc-F8 ( sed )  d-flag set ; 
-
-: opc-F9 ( sbc.y )   ." F9 not coded yet" ; 
-
+: opc-F9 ( sbc.y )  mode.y sbc-core ; 
 : opc-FA ( plx )  pull.xy  X !  check-NZ.x ; 
-
 : opc-FB ( xce )  c-flag @  e-flag @   c-flag !  dup e-flag !
    if emulated else native then ; 
 : opc-FC ( jsr.xi )  PC @ 1+  push16 mode.xi  PC ! ;
-
-: opc-FD ( sbc.x )   ." FD not coded yet" ; 
-
+: opc-FD ( sbc.x )  mode.x  sbc-core ; 
 : opc-FE ( inc.x )  mode.x inc.mem ; 
-
-: opc-FF ( sbc.lx )   ." FF not coded yet" ; 
+: opc-FF ( sbc.lx )  mode.lx  sbc-core ; 
 
 
 \ ---- GENERATE OPCODE JUMP TABLE ----

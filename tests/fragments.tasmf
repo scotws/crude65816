@@ -1,0 +1,49 @@
+\ Test fragments for larger test program for the Crude 65816 Emulator 
+\ Scot W. Stevenson <scot.stevenson@gmail.com>
+\ First version: 05. Okt 2015
+\ This version: 05. Okt 2015
+
+ 
+\ ==== DECIMAL MODE ====
+
+\ = Subtraction in Decimal Mode (SBC) = 
+\ Based on http://visual6502.org/wiki/index.php?title=6502DecimalMode
+
+         sed
+ 
+ \ 00 - 00 and C=0 gives 99 and N=1 V=0 Z=0 C=0
+      00 lda.#
+         clc
+      00 sbc.#
+ 
+ \ 00 - 00 and C=1 gives 00 and N=0 V=0 Z=1 C=1
+      00 lda.#
+         sec
+      00 sbc.#
+ 
+ \ 00 - 01 and C=1 gives 99 and N=1 V=0 Z=0 C=0
+      00 lda.#
+         sec
+      01 sbc.#
+ 
+ \ 0a - 00 and C=1 gives 0a and N=0 V=0 Z=0 C=1
+      0a lda.#
+         sec
+      00 sbc.#
+ 
+ \ 0b - 00 and C=0 gives 0a and N=0 V=0 Z=0 C=1
+      0b lda.#
+         clc
+      00 sbc.#
+ 
+ \ 9a - 00 and C=1 gives 9a and N=1 V=0 Z=0 C=1
+      9a lda.#
+         sec
+      00 sbc.#
+ 
+ \ 9b - 00 and C=0 gives 9a and N=1 V=0 Z=0 C=1
+      9b lda.#
+         clc
+      00 sbc.#
+           
+

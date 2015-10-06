@@ -47,3 +47,23 @@
       00 sbc.#
            
 
+\ === TRB Instrution ===
+
+\ http://6502.org/tutorials/65c02opcodes.html
+
+
+    0a6 lda.#
+     00 sta.d
+     33 lda.#
+     00 trb.d   \ 00 must be 84, Z=0 and A retains 33
+
+        iny
+
+    0a6 lda.#
+     00 sta.d
+     41 lda.#
+     00 trb.d   \ 00 must be A6, Z=1 and A retains 41
+
+
+
+

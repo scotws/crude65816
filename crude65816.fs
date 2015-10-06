@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 05. Oct 2015 
+\ This version: 06. Oct 2015 
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version pre-ALPHA  05. Oct 2015)  
+cr .( Version pre-ALPHA  06. Oct 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -786,6 +786,12 @@ cr .( Defining core routines for opcodes )
 : bit-core ( 65addr -- ) fetch.a 
    dup mask-N.a test&set-n  dup mask-V.a test&set-v  C> and  check-Z ;  
 
+: trb-core ( 65addr -- )  
+   dup fetch.a 
+   dup C> and  check-Z     \ test Z 
+   C>  true mask.a  xor  
+   and  swap store.a ; 
+
 \ INC and DEC for the Accumulator
 : inc.accu ( -- ) C> 1+ mask.a dup check-NZ.a >C ; 
 : dec.accu ( -- ) C> 1- mask.a dup check-NZ.a >C ; 
@@ -891,22 +897,17 @@ cr .( Defining opcode routines themselves ... )
 : opc-11 ( ora.diy )  mode.diy ora-core ; 
 : opc-12 ( ora.di )  mode.di ora-core ; 
 : opc-13 ( ora.siy )  mode.siy ora-core ;  
-
-: opc-14 ( trb.d )   ." 14 not coded yet" ; 
-
+: opc-14 ( trb.d )  mode.d trb-core ;  
 : opc-15 ( ora.dx )  mode.dx ora-core ; 
 : opc-16 ( asl.dx )  mode.dx asl-mem ;  
 : opc-17 ( ora.dily )  mode.dily ora-core ;  
 : opc-18 ( clc )  c-flag clear ; 
 : opc-19 ( ora.y )   mode.y ora-core ; 
 : opc-1A ( inc.a )   inc.accu ;
-
 \ Does not affect flags; compare TXS. In emulation mode, hi byte is paranoided
 \ to 01, native mode always copies full C to S
 : opc-1B ( tcs )  e-flag set?  if  0100 A or  else  C @  then  S ! ;
-
-: opc-1C ( trb )   ." 1C not coded yet" ; 
-
+: opc-1C ( trb )  mode.abs.DBR trb-core ; 
 : opc-1D ( ora.x )  mode.x ora-core ; 
 : opc-1E ( asl.x )  mode.x asl-mem ; 
 : opc-1F ( ora.lx )  mode.lx ora-core ; 

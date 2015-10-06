@@ -32,6 +32,8 @@ QUESTIONS
 
 - If in native mode the m-flag is set, and we go emulated, will unused bit 5 be set as well?
 
+- Figure out what we want to do with BRK, which is currently used for the emulator. See http://forum.6502.org/viewtopic.php?t=24
+
 END
 
 

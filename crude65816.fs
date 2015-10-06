@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 06. Oct 2015 
+\ This version: 06. Oct 2015 (Possum's Day)
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -36,7 +36,7 @@ hex
 cr .( Setting up CPU ... ) 
 
 \ Names follow the convention from the WDC data sheet. We use uppercase letters.
-\ P is generated, not stored, as are A and the B register
+\ P is generated through "P>", not stored, as are A and the B register
 variable PC    \ Program counter (16 bit) 
 variable C     \ C register (16 bit); MSB is B, LSB is A
 variable X     \ X register (8\16 bit)
@@ -213,7 +213,7 @@ create flags
    false , false , false , false , false , false , false , false , 
 
 \ We start with n-flag, not c-flag, as first entry in the table to make
-\ creating P with loops easier
+\ creating P> with loops easier
 : n-flag ( -- addr ) flags ;           \ bit 7 
 : v-flag ( -- addr ) flags cell + ;    \ bit 6 
 : m-flag ( -- addr ) flags 2 cells + ; \ bit 5 in native mode 
@@ -305,6 +305,17 @@ defer check-NZ.TOS   \ Used for LSR and other instructions that don't work on C
 defer carry?.a
 : carry?.8 ( u -- f )  100 and 0<> ; 
 : carry?.16 ( u -- f ) 10000 and 0<> ; 
+
+\ Create status byte out of flag array. We don't care if we are in emulation or
+\ native mode
+: P> ( -- u8 ) 
+   00                      \ initialize P> byte 
+   8 0 ?do                 
+      1 lshift             \ next bit; note first shift is a dummy 
+      flags i cells +  @   \ loop thru flag table, from high bit to low
+      1 and  +             \ get last bit of Forth flag
+   loop ;
+
 
 
 \ --- BCD ROUTINES ---
@@ -407,6 +418,7 @@ cr .( Setting up branching ...)
 : takebranch ( -- )  next1byte signextend 1+  PC @ +  PC ! ;
 : branch-if-true ( f -- )  if takebranch else PC+1 then ; 
 
+
 \ --- STACK STUFF ----
 cr .( Setting up stack ...)
 
@@ -433,10 +445,42 @@ defer pull.a  defer pull.xy
 : pull24 ( -- n24 )  pull8 pull8 pull8 lsb/msb/bank>24 ; 
    
 
+\ --- INTERRUPT ROUTINES ---
+cr .( Setting up interrupt stuff ...)
+
+\ We use the BRK command to drop out of a running loop during emulation. Note
+\ this is not the behaviour of the actual instruction, which simply follows the
+\ interrupt vector. 
+\ TODO See if we want to it this way, http://forum.6502.org/viewtopic.php?t=24
+defer brk.a 
+: brk-core ( -- ) 
+   d-flag clear
+   PC+1  PC @  push16
+   P> push8
+   i-flag set
+   ." *** BRK encountered, dropping into command line ***"
+   quit ; 
+
+: brk.n ( -- )  PBR @  push8  0 PBR !  brk-core ; 
+: brk.e ( -- )  b-flag set  brk-core ; 
+
+\ COP is used as in textbook
+defer cop.a
+: cop.e ( -- ) 
+   ." *** COP encountered ***" 
+   PC @  2 + mask16 push16
+   P> push8
+   i-flag set
+   d-flag clear
+   00fff4 fetch16 PC ! ; 
+
+: cop.n ( -- )  PBR @  push8  0 PBR !  cop.e ; 
+
+
 \ ---- REGISTER MODE SWITCHES ----
 
 \ We use two internal flags to remember the width of the registers. Don't use
-\ the x and m flags directly because this can screw up the status byte P 
+\ the x and m flags directly because this can screw up the status byte P> 
 variable a16flag   a16flag clear 
 variable xy16flag  xy16flag clear 
 
@@ -513,12 +557,16 @@ variable xy16flag  xy16flag clear
    X @  00FF AND  X !   Y @  00FF AND  Y !  
    xy16flag clear ; 
 
+
 \ switch processor modes (native/emulated). There doesn't seem to be a good
 \ verb for "native" like "emulate", so we're "going" 
 : native ( -- )  
    e-flag clear
    m-flag set
    x-flag set
+   ['] brk.n is brk.a
+   ['] cop.n is cop.a 
+
    \ TODO set direct page to 16 zero page
    ; 
 
@@ -529,23 +577,15 @@ variable xy16flag  xy16flag clear
    a:8   xy:8
    S @  00FF AND  0100 OR  S ! \ stack pointer to 0100
    0000 D !  \ direct page register initialized to zero 
-   
+   ['] brk.e is brk.a
+   ['] cop.e is cop.a 
+
    \ TODO Do what with status bit 5 ? 
    \ TODO PBR and DBR ?
    ; 
 
 \ --- STATUS BYTE --- 
 \ These routines have to come after mode switches for the registers 
-
-\ Create status byte out of flag array. We don't care if we are in emulation or
-\ native mode
-: P ( -- u8 ) 
-   00                      \ initialize P byte 
-   8 0 ?do                 
-      1 lshift             \ next bit; note first shift is a dummy 
-      flags i cells +  @   \ loop thru flag table, from high bit to low
-      1 and  +             \ get last bit of Forth flag
-   loop ;
 
 \ Create new flag array based on status byte. Used mainly for PLP instruction
 \ TODO rewrite this once we know it works and REP and SEP are complete
@@ -732,7 +772,7 @@ cr .( Creating output functions ...)
    Y @  X @   xy16flag clear? if  .mask8 .mask8  else  .mask16 .mask16  then 
    
    S @ .mask16   D @ .mask16   DBR @ .mask8
-   P .8bits  space 
+   P> .8bits  space 
    e-flag set? if ." emulated" else ." native" then cr ; 
 
 \ Print stack if we are in emulated mode
@@ -788,9 +828,13 @@ cr .( Defining core routines for opcodes )
 
 : trb-core ( 65addr -- )  
    dup fetch.a 
-   dup C> and  check-Z     \ test Z 
-   C>  true mask.a  xor  
-   and  swap store.a ; 
+   dup C> and check-Z
+   C>  true mask.a xor  and  swap store.a ; 
+
+: tsb-core ( 65addr -- )
+   dup fetch.a 
+   dup C> and check-Z
+   C> or swap store.a ; 
 
 \ INC and DEC for the Accumulator
 : inc.accu ( -- ) C> 1+ mask.a dup check-NZ.a >C ; 
@@ -864,32 +908,22 @@ create subtractions
    subtractions +  @ execute ; 
 
 
-
 \ ---- OPCODE ROUTINES ----
 cr .( Defining opcode routines themselves ... ) 
 
-\ TODO change BRK so we drop into single-step mode, add stack effects
-: opc-00 ( brk )   cr ." *** BRK encountered, halting CPU (ALPHA only) ***" 
-   .state quit ; 
-
+: opc-00 ( brk )  brk.a ; 
 : opc-01 ( ora.dxi )  mode.dxi ora-core ; 
-
-: opc-02 ( cop )  ." 02 not coded yet" ; 
-
+: opc-02 ( cop )  cop.a ; 
 : opc-03 ( ora.s )   mode.s ora-core ; 
-
-: opc-04 ( tsb.d )  ." 04 not coded yet" ; 
-
+: opc-04 ( tsb.d )  mode.d tsb-core ; 
 : opc-05 ( ora.d )  mode.d ora-core ; 
 : opc-06 ( asl.d )  mode.d asl-mem ; 
 : opc-07 ( ora.dil )  mode.dil ora-core ; 
-: opc-08 ( php )  P push8 ; 
+: opc-08 ( php )  P> push8 ; 
 : opc-09 ( ora.# )  mode.imm ora-core PC+a ;
 : opc-0A ( asl.a )  C> asl-core >C check-NZ.a ;  
 : opc-0B ( phd )  D @  mask16 push16 ;
-
-: opc-0C ( tsb )   ." 0C not coded yet" ; 
-
+: opc-0C ( tsb )   mode.abs.DBR tsb-core ; 
 : opc-0D ( ora )  mode.abs.DBR ora-core ; 
 : opc-0E ( asl )  mode.abs.DBR asl-mem ;  
 : opc-0F ( ora.l )  mode.l ora-core ; 
@@ -911,7 +945,6 @@ cr .( Defining opcode routines themselves ... )
 : opc-1D ( ora.x )  mode.x ora-core ; 
 : opc-1E ( asl.x )  mode.x asl-mem ; 
 : opc-1F ( ora.lx )  mode.lx ora-core ; 
-
 \ STEP already increases the PC by one, so we only need to add one byte because
 \ the address pushed is the last byte of the instruction
 : opc-20 ( jsr )  PC @ 1+  push16 next2bytes  PC ! ;
@@ -1243,9 +1276,21 @@ cr .( Setting up interrupts ...)
 \ type 'run' or 'step'
 
 \ Increase PC before executing instruction so we are pointing at the
-\ operand (if available)
-: step ( -- )  opc-jumptable next1byte cells +  @  PC+1 execute ; 
-: run ( -- )  begin step again ; 
+\ operand (if available). Both commands check to see if we were stopped by a BRK
+\ by checking the b-flag.
+\
+: unbreak ( -- ) 
+   b-flag clear  i-flag clear 
+   pull16 drop 
+   e-flag clear? if pull8 drop then ; 
+
+: step ( -- )  
+   b-flag set? if unbreak then
+   opc-jumptable next1byte cells +  @  PC+1 execute ; 
+
+: run ( -- )  
+   b-flag set? if unbreak then 
+   begin step again ; 
 
 
 \ ---- START EMULATION ----

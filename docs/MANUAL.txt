@@ -1,7 +1,7 @@
 Manual for A Crude 65816 Emulator 
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 09. Jan 2015
-This version: 06. Oct 2015  (Possum's Day) 
+This version: 07. Oct 2015
 
 
 THIS DOCUMENT IS CURRENTLY MERELY A COLLECTION OF NOTES. WHEN IN DOUBT, USE THE SOURCE CODE. 
@@ -89,9 +89,9 @@ To monitor a memory address every step, we can use the FETCH instructions. To wa
 step .state  ." DP 00:"  0000 fetch16 . 
 
 
-USING THE BRK INSTUCTION
+HALTING THE EMULATION 
 
-The BRK instruction can be used to interrupt the emulator at a certain point. This means that the instruction is not available for other uses in the code. To continue after the interrupt, simply use RUN or STEP again: These use the b-flag to see if execution was stopped by BRK and reverse the effects accordingly.
+In many 6502 emulators, the BRK instruction is used to give control back to the emulator. We use the 65816's STP instruction, which halts the processor. After STP, you can resume the emulation with either STEP or RUN from the same spot.  
 
 
 

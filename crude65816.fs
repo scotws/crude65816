@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 06. Oct 2015 (Possum's Day)
+\ This version: 07. Oct 2015
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version pre-ALPHA  06. Oct 2015)  
+cr .( Version pre-ALPHA  07. Oct 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -57,6 +57,15 @@ defer mask.a  defer mask.xy
 : mask16 ( u -- u16 ) 0ffff and ; 
 : mask24 ( u -- u24 ) 0ffffff and ; 
 : mask.B ( u -- u16 ) 0ff00 and ; \ used to protect B  TODO really need this?
+
+\ Print byte as bits, does not add space, returns as HEX
+: .8bits ( u -- ) 
+   2 base !  s>d <# # # # # # # # # #> type  hex ; 
+
+\ Format numbers to two, four, and six places, assumes HEX
+: .mask8 ( n -- )  s>d <# # # #> type space ; 
+: .mask16 ( n -- )  s>d <# # # # # #> type space ; 
+: .mask24 ( n -- )  s>d <# # # # # # # #> type space ; 
 
 \ return least, most significant byte of 16-bit number
 : lsb ( u -- u8 )  mask8 ;
@@ -448,26 +457,20 @@ defer pull.a  defer pull.xy
 \ --- INTERRUPT ROUTINES ---
 cr .( Setting up interrupt stuff ...)
 
-\ We use the BRK command to drop out of a running loop during emulation. Note
-\ this is not the behaviour of the actual instruction, which simply follows the
-\ interrupt vector. 
-\ TODO See if we want to it this way, http://forum.6502.org/viewtopic.php?t=24
+\ We do not use the BRK command to drop out of a running loop during emulation,
+\ this is the job of STP. 
+\ TODO see if we need to clear the PBR in emulated mode as well 
 defer brk.a 
 : brk-core ( -- ) 
-   d-flag clear
-   PC+1  PC @  push16
-   P> push8
-   i-flag set
-   ." *** BRK encountered, dropping into command line ***"
-   quit ; 
-
-: brk.n ( -- )  PBR @  push8  0 PBR !  brk-core ; 
-: brk.e ( -- )  b-flag set  brk-core ; 
+   ." *** BRK encountered at " PC24 .mask24 ." ***" 
+   d-flag clear   PC+1  PC @  push16  P> push8  i-flag set ; 
+: brk.n ( -- )  PBR @  push8  0 PBR !  brk-core  0ffe6 PC ! ; 
+: brk.e ( -- )  b-flag set  brk-core  0fffe PC ! ;
 
 \ COP is used as in textbook
 defer cop.a
 : cop.e ( -- ) 
-   ." *** COP encountered ***" 
+   ." *** COP encountered at " PC24 .mask24 ." ***" 
    PC @  2 + mask16 push16
    P> push8
    i-flag set
@@ -723,15 +726,6 @@ cr .( Defining addressing modes ...)
 
 \ ---- OUTPUT FUNCTIONS ----
 cr .( Creating output functions ...) 
-
-\ Print byte as bits, does not add space, returns as HEX
-: .8bits ( u -- ) 
-   2 base !  s>d <# # # # # # # # # #> type  hex ; 
-
-\ Format numbers to two, four, and six places, assumes HEX
-: .mask8 ( n -- )  s>d <# # # #> type space ; 
-: .mask16 ( n -- )  s>d <# # # # # #> type space ; 
-: .mask24 ( n -- )  s>d <# # # # # # # #> type space ; 
 
 \ Print state of machine 
 \ TODO rewrite this once we know what we really want to see
@@ -1160,10 +1154,9 @@ cr .( Defining opcode routines themselves ... )
 : opc-D8 ( cld )  d-flag clear ;  
 : opc-D9 ( cmp.y )  C> mode.y cmp-core ; 
 : opc-DA ( phx )  X @  push.xy ;
-
-: opc-DB ( stp )  cr cr ." *** STP instruction, halting processor ***" cr
+: opc-DB ( stp )  cr cr 
+   ." *** STP encountered at " PC24 .mask24 ." Resume with STEP or RUN ***" cr
    .state quit ; 
-
 : opc-DC ( jmp.il )  mode.il 24>PC24! ; 
 : opc-DD ( cmp.x )  C> mode.x cmp-core ;  
 : opc-DE ( dec.x )  mode.x dec.mem ; 
@@ -1276,22 +1269,9 @@ cr .( Setting up interrupts ...)
 \ type 'run' or 'step'
 
 \ Increase PC before executing instruction so we are pointing at the
-\ operand (if available). Both commands check to see if we were stopped by a BRK
-\ by checking the b-flag.
-\
-: unbreak ( -- ) 
-   b-flag clear  i-flag clear 
-   pull16 drop 
-   e-flag clear? if pull8 drop then ; 
-
-: step ( -- )  
-   b-flag set? if unbreak then
-   opc-jumptable next1byte cells +  @  PC+1 execute ; 
-
-: run ( -- )  
-   b-flag set? if unbreak then 
-   begin step again ; 
-
+\ operand (if available). 
+: step ( -- )  opc-jumptable next1byte cells +  @  PC+1 execute ; 
+: run ( -- )  begin step again ; 
 
 \ ---- START EMULATION ----
 cr cr .( All done. Bringing up machine.) cr 

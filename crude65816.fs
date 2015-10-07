@@ -326,7 +326,6 @@ defer carry?.a
    loop ;
 
 
-
 \ --- BCD ROUTINES ---
 cr .( Setting up BCD routines ...) 
 
@@ -560,33 +559,6 @@ variable xy16flag  xy16flag clear
    X @  00FF AND  X !   Y @  00FF AND  Y !  
    xy16flag clear ; 
 
-
-\ switch processor modes (native/emulated). There doesn't seem to be a good
-\ verb for "native" like "emulate", so we're "going" 
-: native ( -- )  
-   e-flag clear
-   m-flag set
-   x-flag set
-   ['] brk.n is brk.a
-   ['] cop.n is cop.a 
-
-   \ TODO set direct page to 16 zero page
-   ; 
-
-: emulated ( -- )  \ p. 45
-   e-flag set   
-   b-flag clear      \ TODO Make sure this is really what happens
-   unused-flag clear \ Make sure unused status bit 5 is not set 
-   a:8   xy:8
-   S @  00FF AND  0100 OR  S ! \ stack pointer to 0100
-   0000 D !  \ direct page register initialized to zero 
-   ['] brk.e is brk.a
-   ['] cop.e is cop.a 
-
-   \ TODO Do what with status bit 5 ? 
-   \ TODO PBR and DBR ?
-   ; 
-
 \ --- STATUS BYTE --- 
 \ These routines have to come after mode switches for the registers 
 
@@ -620,6 +592,46 @@ variable xy16flag  xy16flag clear
 
    clear-unused
    flag-modeswitch ; 
+
+\ Return from interrupt
+\ This needs to come after the status byte routines but before the switch of the
+\ processor modes
+defer rti.a
+: rti-core ( -- )  pull8 >P  pull16 PC ! ; 
+: rti.e  ( -- )  rti-core ; 
+: rti.n  ( -- )  rti-core  pull8 PBR ! ; 
+
+\ switch processor modes (native/emulated). There doesn't seem to be a good
+\ verb for "native" like "emulate", so we're "going" 
+: native ( -- )  
+   e-flag clear
+   m-flag set
+   x-flag set
+   ['] brk.n is brk.a
+   ['] cop.n is cop.a 
+   ['] rti.n is rti.a 
+
+
+   \ TODO set direct page to 16 zero page
+   ; 
+
+: emulated ( -- )  \ p. 45
+   e-flag set   
+   b-flag clear      \ TODO Make sure this is really what happens
+   unused-flag clear \ Make sure unused status bit 5 is not set 
+   a:8   xy:8
+   S @  00FF AND  0100 OR  S ! \ stack pointer to 0100
+   0000 D !  \ direct page register initialized to zero 
+   ['] brk.e is brk.a
+   ['] cop.e is cop.a 
+   ['] rti.e is rti.a 
+
+   \ TODO Do what with status bit 5 ? 
+   \ TODO PBR and DBR ?
+   ; 
+
+
+
 
 
 \ ---- ADDRESSING MODES --- 
@@ -790,6 +802,18 @@ cr .( Creating output functions ...)
    10 +loop cr ; 
 
 
+\ ---- BLOCK MOVE INSTRUCTIONS ----
+
+\ TODO see if we need to mask X and Y in the last line 
+: move.a ( -- ) 
+   next1byte  dup >r  PC+1  \ remember, this is the destination byte
+   next1byte PC+1 
+   X @  swap mem16/bank>24  memory +  \ full source address
+   swap Y @  swap mem16/bank>24  memory +  \ full destination address
+   C @  1+  move 
+   0ffff C !  1 X +!  1 Y +!  r> DBR ! ; \ fake the results of the loop
+
+
 \ ---- OPCODE CORE ROUTINES ----
 cr .( Defining core routines for opcodes ) 
 \ TODO Rewrite/optimize/refract these
@@ -835,11 +859,11 @@ cr .( Defining core routines for opcodes )
 : dec.accu ( -- ) C> 1- mask.a dup check-NZ.a >C ; 
 
 \ INC and DEC for memory
-: inc.mem  ( 65addr -- ) dup fetch.a 1+ mask.a dup check-NZ.TOS swap store.a ; 
-: dec.mem  ( 65addr -- ) dup fetch.a 1- mask.a dup check-NZ.TOS swap store.a ; 
+: inc.mem  ( 65addr -- )  dup fetch.a 1+ mask.a dup check-NZ.TOS swap store.a ; 
+: dec.mem  ( 65addr -- )  dup fetch.a 1- mask.a dup check-NZ.TOS swap store.a ; 
 
-: cmp-core ( u 65addr -- ) fetch.a cmp.a ; 
-: cpxy-core ( u 65addr -- ) fetch.xy cmp.xy ; 
+: cmp-core ( u 65addr -- )  fetch.a cmp.a ; 
+: cpxy-core ( u 65addr -- )  fetch.xy cmp.xy ; 
 
 : lda-core ( 65addr -- )  fetch.a  >C  check-NZ.a ;
 : ldx-core ( 65addr -- )  fetch.xy  X !  check-NZ.x ;
@@ -878,7 +902,7 @@ create additions
 \ --- Subtraction Routines ---
 
 \ The 6502 and 65816 use the c-flag as an inverted borrow
-: invert-borrow ( -- ) c-flag dup @ invert swap ! ; 
+: invert-borrow ( -- ) c-flag dup @ invert  swap ! ; 
 
 \ Common routine for 8- and 16-bit binary subtraction
 : sbc-bin ( addr -- ) fetch.a invert adc-sbc-core invert-borrow ; 
@@ -973,16 +997,12 @@ cr .( Defining opcode routines themselves ... )
 : opc-3D ( and.x )   mode.x and-core ; 
 : opc-3E ( rol.x )  mode.x rol-mem ; 
 : opc-3F ( and.lx )  mode.lx and-core ; 
-
-: opc-40 ( rti )   ." 40 not coded yet" ; 
-
+: opc-40 ( rti )   rti.a ; 
 : opc-41 ( eor.dxi )  mode.dxi eor-core ; 
 : opc-42 ( wdm ) cr cr ." WARNING: WDM executed at " 
    PBR @ .mask8  PC @ .mask16  PC+1 ; 
 : opc-43 ( eor.s )  mode.s eor-core ; 
-
-: opc-44 ( mvp )   ." 44 not coded yet" ; 
-
+: opc-44 ( mvp )  move.a ;  
 : opc-45 ( eor.d )  mode.d eor-core ; 
 : opc-46 ( lsr.d )   mode.d lsr-mem ; 
 : opc-47 ( eor.dil )  mode.dil eor-core ;  
@@ -998,9 +1018,7 @@ cr .( Defining opcode routines themselves ... )
 : opc-51 ( eor.diy )  mode.diy eor-core ;  
 : opc-52 ( eor.di )  mode.di eor-core ; 
 : opc-53 ( eor.siy )  mode.siy eor-core ; 
-
-: opc-54 ( mvn )   ." 54 not coded yet" ; 
-
+: opc-54 ( mvn )  move.a ; 
 : opc-55 ( eor.dx )   mode.dx eor-core ; 
 : opc-56 ( lsr.dx ) mode.dx lsr-mem ; 
 : opc-57 ( eor.dily )  mode.dily eor-core ; 

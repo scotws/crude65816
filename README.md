@@ -2,10 +2,6 @@
 
 Scot W. Stevenson <scot.stevenson@gmail.com>
 
-First version: 08. Jan 2015
-
-This version: 20. Sep 2015
-
 
 ### TL;DR
 
@@ -13,7 +9,7 @@ This is a PRE-ALPHA version of an emulator for the 65816 8/16-bit CPU in Gforth.
 Start it with 
 
 ```
-gforth -m 1G 
+gforth -m 64M 
 ```
 
 and then load the emulator with
@@ -44,14 +40,15 @@ name. For instance, it completely ignores all timing and clock considerations.
 
 ### BUT MOTHER OF DRAGONS, WHY IN FORTH?
 
-The ÜSqM0 taught me how amazingly powerful Forth is on simple hardware. In fact,
-one of the main reasons for switching to the 65816 is to be able to do more with
-Forth. In fact, the Crude Emulator relies on modern hardware to work and just
+The Übersquirrel Mark Zero taught me how amazingly powerful Forth is on simple
+hardware, how short the programs can be, and how fun it is just to code it. In
+fact one of the main reasons for switching to the 65816 is to be able to do more
+with Forth. The Crude Emulator itself relies on modern hardware to work and just
 assumes we have enough RAM and a fast processor for everything. 
 
 See `docs/MANUAL.txt` for further information.
 
-### DEVELOPMENT
+### DEVELOPMENT SPEED
 
-This program is a hobby, and is developed in fits and starts. Feedback is most
+This program is a hobby, and is developed in fits and starts. Feedback is still most
 welcome. 

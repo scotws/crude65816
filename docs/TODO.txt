@@ -1,27 +1,27 @@
 TODO for A Crude 65816 Emulator
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 27. May 2015
-This version: 24. Sep 2015
+This version: 08. Oct 2015
+
 
 IMMEDIATELY 
-
-- Replace PC as A on TOS, completely rewriting the whole code. FML.
+- Add interrupt code. Declare ALPHA when finished. 
 
 
 SHORT TERM
 
-- Code all opcodes before doing anything else
 - Avoid all optimization before we know if we're going to have to rewrite
 
 
 LONG TERM 
 
-- Add FREEZE/THAW commands to save state of emulator to disk
+- Add FREEZE/THAW commands to save state of emulator 
 
 
 NICE TO HAVE 
 
-- Add color output to .STATE, .DIRECT, and .STACK in terminals that support it
+- Add color output to .STATE, .DIRECT, and .STACK on terminals that support it
+
 
 
 QUESTIONS 
@@ -32,7 +32,8 @@ QUESTIONS
 
 - If in native mode the m-flag is set, and we go emulated, will unused bit 5 be set as well?
 
-- Figure out what we want to do with BRK, which is currently used for the emulator. See http://forum.6502.org/viewtopic.php?t=24
+- How is the b-flag cleared after BRK in emulation mode?
+
 
 END
 

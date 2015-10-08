@@ -6,7 +6,7 @@ Scot W. Stevenson <scot.stevenson@gmail.com>
 ### TL;DR
 
 This is a PRE-ALPHA version of an emulator for the 65816 8/16-bit CPU in Gforth.
-Start it with 
+If you must jump in without reading the documentation, start it with 
 
 ```
 gforth -m 64M 
@@ -38,7 +38,7 @@ Unfortunately, emulators for the 65816 are few and far between, and so I decided
 I would have to write my own. This is it. It is horribly crude -- hence the
 name. For instance, it completely ignores all timing and clock considerations.
 
-### BUT MOTHER OF DRAGONS, WHY IN FORTH?
+### MOTHER OF DRAGONS, WHY IN FORTH?
 
 The Übersquirrel Mark Zero taught me how amazingly powerful Forth is on simple
 hardware, how short the programs can be, and how fun it is just to code it. In

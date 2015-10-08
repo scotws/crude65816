@@ -146,11 +146,13 @@ see http://forum.6502.org/viewtopic.php?f=8&t=3459&p=40389#p40370
 
 KNOWN ISSUES 
 
-- Wrapping addresses is currenty not implemented. This will be corrected for the BETA version
+- Wrapping addresses is currenty not implemented. This will be corrected during ALPHA. 
 
 - The Overflow Flag (v) is not correctly set in Decimal mode. See http://www.6502.org/tutorials/vflag.html and http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html for details. This bug has low priority. 
 
-- The N and Z flag do not behave as required during subtraction in decimal mode. See source text for details. This will be corrected for the BETA version.
+- The N and Z flag do not behave as required during subtraction in decimal mode. See source text for details. This bug will be corrected during ALPHA.
+
+- The ABORT interrupt does not complete the instruction, throwing away the results, and then rerunning it, but instead is run after an instruction. This bug has low priority.  
 
 
 

@@ -1,4 +1,4 @@
-   \ A Crude 65816 Emulator 
+\ A Crude 65816 Emulator 
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
@@ -45,6 +45,15 @@ variable D     \ Direct register (Zero Page on 6502) (16 bit)
 variable S     \ Stack Pointer (8/16 bit)
 variable DBR   \ Data Bank register ("B") (8 bit)
 variable PBR   \ Program Bank register ("K") (8 bit)
+
+\ Vectors for interrupts
+00fffc constant reset-v   \ same for emulated and native modes
+
+defer abort-v   00ffe8 constant abort-v.n   00fff8 constant abort-v.e
+defer cop-v     00ffe4 constant cop-v.n     00fff4 constant cop-v.e 
+defer irq-v     00ffee constant irq-v.n     00fffe constant irq-v.e 
+defer nmi-v     00ffea constant nmi-v.n     00fffa constant nmi-v.e 
+defer brk-v     00ffe6 constant brk-v.n     00fffe constant brk-v.e   
 
 
 \ ---- HELPER FUNCTIONS ----
@@ -462,9 +471,9 @@ cr .( Setting up interrupt stuff ...)
 defer brk.a 
 : brk-core ( -- ) 
    ." *** BRK encountered at " PC24 .mask24 ." ***" 
-   d-flag clear   PC+1  PC @  push16  P> push8  i-flag set ; 
-: brk.n ( -- )  PBR @  push8  0 PBR !  brk-core  0ffe6 PC ! ; 
-: brk.e ( -- )  b-flag set  brk-core  0fffe PC ! ;
+   d-flag clear   PC+1  PC @  push16  P> push8  i-flag set  brk-v PC ! ; 
+: brk.n ( -- )  PBR @  push8  0 PBR !   brk-core  ; 
+: brk.e ( -- )  b-flag set   brk-core ;
 
 \ COP is used as in textbook
 defer cop.a
@@ -474,7 +483,7 @@ defer cop.a
    P> push8
    i-flag set
    d-flag clear
-   00fff4 fetch16 PC ! ; 
+   cop-v fetch16 PC ! ; 
 
 : cop.n ( -- )  PBR @  push8  0 PBR !  cop.e ; 
 
@@ -487,7 +496,6 @@ variable a16flag   a16flag clear
 variable xy16flag   xy16flag clear 
 
 \ Switch accumulator 8<->16 bit (p. 51 in Manual)
-\ TODO ADD MASK.A 
 : a:16  ( -- )  
    ['] fetch16 is fetch.a
    ['] store16 is store.a
@@ -605,9 +613,7 @@ defer rep.a
 : rep.n  ( n8 -- ) next1byte invert P> and >P PC+1 ;
 : rep.e  ( n8 -- ) next1byte 0cf and invert P> and >P PC+1 ; \ Mask with 11001111 
 
-
-\ switch processor modes (native/emulated). There doesn't seem to be a good
-\ verb for "native" like "emulate", so we're "going" 
+\ switch processor modes (native/emulated). See p. 45 and 61
 : native ( -- )  
    e-flag clear
    m-flag set
@@ -617,12 +623,15 @@ defer rep.a
    ['] rti.n is rti.a 
    ['] rep.n is rep.a 
    ['] sep.n is sep.a 
-
-
-   \ TODO set direct page to 16 zero page
-   ; 
+   ['] abort-v.n is abort-v   
+   ['] cop-v.n is cop-v 
+   ['] irq-v.n is irq-v     
+   ['] nmi-v.n is nmi-v     
+   ['] brk-v.n is brk-v ; 
 
 : emulated ( -- )  \ p. 45
+   \ TODO What happens with status bit 5 ? 
+   \ PBR and DBR switch unchanged
    e-flag set   
    b-flag clear      \ TODO Make sure this is really what happens
    unused-flag clear \ Make sure unused status bit 5 is not set 
@@ -634,10 +643,11 @@ defer rep.a
    ['] rti.e is rti.a 
    ['] rep.e is rep.a 
    ['] sep.e is sep.a 
-
-   \ TODO Do what with status bit 5 ? 
-   \ TODO PBR and DBR ?
-   ; 
+   ['] abort-v.e is abort-v   
+   ['] cop-v.e is cop-v 
+   ['] irq-v.e is irq-v     
+   ['] nmi-v.e is nmi-v     
+   ['] brk-v.e is brk-v  ;
 
 
 \ ---- ADDRESSING MODES --- 
@@ -1094,14 +1104,11 @@ cr .( Defining opcode routines themselves ... )
 : opc-97 ( sta.dily )  C> mode.dily store.a ;  
 : opc-98 ( tya )  Y @  >C check-NZ.a ; 
 : opc-99 ( sta.y )  C> mode.y store.a ; 
-
-\ Does not alter flags; compare TCS 
 : opc-9A ( txs ) 
    X @  e-flag set? if  \ emulation mode, hi byte paranoided to 01
       mask8  0100 or else
-      x-flag set? if mask8 then  \ native mode, 8 bit X; hi byte is 00
-   then  S ! ; 
-            
+         x-flag set? if mask8 then  \ native mode, 8 bit X; hi byte is 00
+      then  S ! ; 
 : opc-9B ( txy )  X @  Y !  check-NZ.y ;
 : opc-9C ( stz )  0 mode.abs.DBR store.a ; 
 : opc-9D ( sta.x ) C> mode.x store.a ; 
@@ -1147,14 +1154,12 @@ cr .( Defining opcode routines themselves ... )
 : opc-C5 ( cmp.d )   C> mode.d cmp-core ;
 : opc-C6 ( dec.d )  mode.d dec.mem ;
 : opc-C7 ( cmp.dil )  C> mode.dil cmp-core ;  
-: opc-C8 ( iny )  Y @  1+  mask.xy  Y !  check-NZ.y ;
-: opc-C9 ( cmp.# ) C> mode.imm cmp-core PC+a ; 
+: opc-C8 ( iny )   Y @  1+  mask.xy  Y !  check-NZ.y ;
+: opc-C9 ( cmp.# )  C> mode.imm cmp-core PC+a ; 
 : opc-CA ( dex )  X @  1- mask.xy  X !  check-NZ.x ;
-
-: opc-CB ( wai ) \ TODO crude testing version, complete this for i-flag
-   cr cr ." *** WAI instruction, halting processor ***" .state quit 
-   cr ." WARNING: WAI not fully implemented" ; 
-
+: opc-CB ( wai )  cr cr 
+   ." *** WAI instruction, halting processor ***" cr 
+   .state quit ; 
 : opc-CC ( cpy )  Y @  mode.abs.DBR cpxy-core ; 
 : opc-CD ( cmp )  C> mode.abs.DBR cmp-core ; 
 : opc-CE ( dec )  mode.abs.DBR dec.mem ;
@@ -1233,43 +1238,41 @@ create opc-jumptable   make-opc-jumptable
 
 
 \ ---- INTERRUPTS ---- 
-\ All vectors are 16 bit, access with fetch16 when given full 24 bit address
-\ n in name is for native mode, e is for emulated mode
+\ See http://sbc.bcstechnology.net/65c816interrupts.html for details 
+\ See page 192, also http://6502.org/tutorials/interrupts.html
+\ Remember interrupt vectors are constants, not variables
 cr .( Setting up interrupts ...)
 
-0ffe4 constant cop-n-v
-0ffe6 constant brk-n-v  \ no such vector in emulated mode
-0ffe8 constant abort-n-v  
-0ffea constant nmi-n-v
-0ffee constant irq-n-v
+\ native mode pushes the PBR to the stack as well
+: interrupt-core ( -- ) 
+   e-flag clear? if PBR @ push8 then 
+   PC @ push16  
+   P> push8 
+   i-flag set  d-flag clear 
+   0 PBR ! ;  
+ 
+\ ABORT on real hardware actually completes the instruction that is currently
+\ being executed, without saving the results, and then reruns it after the
+\ interrupt is completed. We currently complete the instruction instead. 
+: abort-i ( -- )  interrupt-core abort-v fetch16  PC ! ; 
+: irq-i ( -- )  i-flag clear? if interrupt-core irq-v fetch16  PC ! then ; 
+: nmi-i ( -- )  interrupt-core nmi-v fetch16  PC ! ; 
 
-0fff4 constant cop-e-v
-0fff8 constant abort-e-v  
-0fffa constant nmi-e-v
-0fffc constant reset-v   \ same for emulated and native
-0fffe constant irq-e-v
+: reset-i ( -- )  \ p.201 and http://www.pagetable.com/?p=410
+   i-flag set  d-flag clear  \ c, n, v, and z flags are in undefined state
+   emulated  \ sets e, m, x-flags; MSB of X and Y are set to zero 
+   00 PBR !  00 DBR !  0000 D ! 
+   \ LSB of S is decreased by 3, see http://forum.6502.org/viewtopic.php?f=4&t=2258
+   S @  3 - mask8  0100 or  S !  \ only MSB is reset to 01 
+   reset-v fetch16  PC ! ; 
 
-: poweron ( -- ) \ TODO not used yet
+: poweron ( -- ) 
    0000 D !  \ intiate Direct Page to zero (p. 155)
-   \ TODO add everything else
-   ; 
-
-: reset-i ( -- )  \ p.201
-   emulated
-   \ TODO Set flags
-   00 C !  00 X !   00 Y !  00 PBR !  00 DBR !  0000 D ! 
-   reset-v fetch16  PC !  \ PC16 is TOS 
-   \ RESET and power on set the MSB of the S to $01 but don't put the LSB in
-   \ a defined state (http://forum.6502.org/viewtopic.php?f=4&t=2258) We use
-   \ a weird but famous number for the initial value to make this clear
-   S @  mask8  012a OR  S ! ;
-
-: irq-i ( -- ) ." IRQ routine not programmed yet" ; \ TODO 
-: nmi-i ( -- ) ." NMI routine not programmed yet" ; \ TODO 
-: abort-i ( -- ) ." ABORT routine not programmed yet" ; \ TODO 
-: brk-i ( -- ) ." BREAK routine not programmed yet" ; \ TODO 
-: cop-i ( -- ) ." COP routine not programmed yet" ; \ TODO 
-
+   \ S, A, X, and Y are not put in a defined state after power on (see
+   \ http://forum.6502.org/viewtopic.php?f=4&t=2258) We use a weird but famous
+   \ number for the initial value to make this clear
+   2a2a C !  2a X !  2a Y ! 
+   reset-i ; 
 
 \ ---- MAIN CONTROL ----
 \ Single-step through the program, or run emulation. To start at a given
@@ -1284,8 +1287,7 @@ cr .( Setting up interrupts ...)
 \ ---- START EMULATION ----
 cr cr .( All done. Bringing up machine.) cr 
 
-\ TODO replace RESET-I with POWERON 
-reset-i 
+poweron 
 .state 
 
 cr ." Machine ready. Type 'run' to start emulation, 'step' for single-step."

@@ -1,8 +1,8 @@
-\ A Crude 65816 Emulator 
+   \ A Crude 65816 Emulator 
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 08. Jan 2015
-\ This version: 07. Oct 2015
+\ This version: 08. Oct 2015
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version pre-ALPHA  07. Oct 2015)  
+cr .( Version pre-ALPHA  08. Oct 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -233,7 +233,7 @@ create flags
 : z-flag ( -- addr ) flags 6 cells + ; \ bit 1 
 : c-flag ( -- addr ) flags 7 cells + ; \ bit 0 
 
-\ And then there's this guy: Emulation flag is not part of the status byte
+\ And then there's this guy. Emulation flag is not part of the status byte
 variable e-flag
 
 \ We don't use bit 5 in emulation mode, but it looks weird if it is set when we
@@ -484,7 +484,7 @@ defer cop.a
 \ We use two internal flags to remember the width of the registers. Don't use
 \ the x and m flags directly because this can screw up the status byte P> 
 variable a16flag   a16flag clear 
-variable xy16flag  xy16flag clear 
+variable xy16flag   xy16flag clear 
 
 \ Switch accumulator 8<->16 bit (p. 51 in Manual)
 \ TODO ADD MASK.A 
@@ -562,24 +562,18 @@ variable xy16flag  xy16flag clear
 \ --- STATUS BYTE --- 
 \ These routines have to come after mode switches for the registers 
 
-\ Create new flag array based on status byte. Used mainly for PLP instruction
-\ TODO rewrite this once we know it works and REP and SEP are complete
-
-\ In emulated mode, bit 5 is always zero 
-\ TODO check hardware to see if this is true 
-\ TODO see if we can use same routine for REP and SEP
-: clear-unused ( -- ) e-flag set? if unused-flag clear then ; 
-
 \ In native mode, changing m and x flags might change the size of these
 \ registers 
-\ TODO get rid of the IFs 
-\ TODO see if we can use same routine for REP and SEP
+\ TODO This sucks, get rid of the IFs 
 : flag-modeswitch ( -- ) 
    e-flag clear? if
       m-flag set? if a:8  a16flag clear  else
                      a:16  a16flag set  then 
       x-flag set? if xy:8  xy16flag clear  else
                      xy:16  xy16flag set  then 
+   else 
+   \ In emulated mode, bit 5 is always zero 
+      unused-flag clear
    then ;  
 
 : >P ( u8 -- ) 
@@ -590,7 +584,6 @@ variable xy16flag  xy16flag clear
       1 rshift
    -1 +loop 
 
-   clear-unused
    flag-modeswitch ; 
 
 \ Return from interrupt
@@ -601,6 +594,18 @@ defer rti.a
 : rti.e  ( -- )  rti-core ; 
 : rti.n  ( -- )  rti-core  pull8 PBR ! ; 
 
+\ SEP, REP
+\ This needs to come after the status byte routines but before the switch of the
+\ processor modes
+defer sep.a
+: sep.n  ( n8 -- ) P> next1byte or >P PC+1 ;
+: sep.e  ( n8 -- ) next1byte 0cf and P> or >P PC+1 ; \ Mask with 11001111 
+
+defer rep.a
+: rep.n  ( n8 -- ) next1byte invert P> and >P PC+1 ;
+: rep.e  ( n8 -- ) next1byte 0cf and invert P> and >P PC+1 ; \ Mask with 11001111 
+
+
 \ switch processor modes (native/emulated). There doesn't seem to be a good
 \ verb for "native" like "emulate", so we're "going" 
 : native ( -- )  
@@ -610,6 +615,8 @@ defer rti.a
    ['] brk.n is brk.a
    ['] cop.n is cop.a 
    ['] rti.n is rti.a 
+   ['] rep.n is rep.a 
+   ['] sep.n is sep.a 
 
 
    \ TODO set direct page to 16 zero page
@@ -625,13 +632,12 @@ defer rti.a
    ['] brk.e is brk.a
    ['] cop.e is cop.a 
    ['] rti.e is rti.a 
+   ['] rep.e is rep.a 
+   ['] sep.e is sep.a 
 
    \ TODO Do what with status bit 5 ? 
    \ TODO PBR and DBR ?
    ; 
-
-
-
 
 
 \ ---- ADDRESSING MODES --- 
@@ -1135,15 +1141,7 @@ cr .( Defining opcode routines themselves ... )
 : opc-BF ( lda.lx )  mode.lx lda-core ;
 : opc-C0 ( cpy.# )  Y @  mode.imm cpxy-core ; 
 : opc-C1 ( cmp.dxi )  C> mode.dxi cmp-core ; 
-
-: opc-C2 ( rep ) \ TODO crude testing version, complete this for all flags
-   cr ." WARNING: REP is incomplete, works only on m and x flags" cr
-   next1byte 
-   dup  20 = if a:16 m-flag clear else 
-   dup  10 = if xy:16 x-flag clear else 
-   dup  30 = if a:16 xy:16  x-flag clear  m-flag clear  then then then drop 
-   PC+1 ; 
-
+: opc-C2 ( rep ) rep.a ;
 : opc-C3 ( cmp.s )  C> mode.s cmp-core ; 
 : opc-C4 ( cpy.d )  Y @  mode.d cpxy-core ; 
 : opc-C5 ( cmp.d )   C> mode.d cmp-core ;
@@ -1181,15 +1179,7 @@ cr .( Defining opcode routines themselves ... )
 : opc-DF ( cmp.lx ) C> mode.lx cmp-core ;  
 : opc-E0 ( cpx.# )  X @  mode.imm cpxy-core ; 
 : opc-E1 ( sbc.dxi )  mode.dxi sbc-core ; 
-
-: opc-E2 ( sep ) \ TODO crude testing version, complete this for all flags
-   cr ." WARNING: SEP is incomplete, works only on m and x flags" cr
-   next1byte 
-   dup  20 = if a:8  a16flag set  else 
-   dup  10 = if xy:8  xy16flag set  else 
-   dup  30 = if a:8 xy:8  a16flag set  xy16flag set  then then then drop 
-   PC+1 ; 
-
+: opc-E2 ( sep ) sep.a ; 
 : opc-E3 ( sbc.s )  mode.s sbc-core ; 
 : opc-E4 ( cpx.d )  X @  mode.d cpxy-core ; 
 : opc-E5 ( sbc.d )  mode.d sbc-core ; 

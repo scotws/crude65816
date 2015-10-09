@@ -5,7 +5,8 @@ Scot W. Stevenson <scot.stevenson@gmail.com>
 
 ### TL;DR
 
-This is a PRE-ALPHA version of an emulator for the 65816 8/16-bit CPU in Gforth.
+This is an ALPHA version of an emulator for the 65816 8/16-bit CPU in Gforth.
+"Alpha" means that "everything does something, sometimes even the right thing".
 If you must jump in without reading the documentation, start it with 
 
 ```
@@ -19,7 +20,7 @@ include crude65816.fs
 ```
 
 You an either "run" or "step" the default monitor program. That doesn't do jack
-at the moment, really, but will in the future. PRE-ALPHA, remember? There is a
+at the moment, really, but will in the future. ALPHA, remember? There is a
 discussion of the program [at 6502.org]
 (http://forum.6502.org/viewtopic.php?f=8&t=3306).
 

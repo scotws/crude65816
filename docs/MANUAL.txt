@@ -45,14 +45,16 @@ The Crude Emulator current supports the following addition commands. Note that b
         .direct         - print the Direct Page based on D register
         .stack          - print the 65816 stack if in emulated mode
         .state          - print the CPU state (register content, etc)
+        abort-i         - trigger the ABORT interrupt 
         bye             - end emulation (normal Forth command) 
         fetch8          - fetch a byte from 24-bit address on Forth stack
         fetch16         - fetch a double byte from 24-bit address on Forth stack
         fetch24         - fetch three bytes from 24-bit address on Forth stack
         emulate         - switch the CPU to emulated (8-bit) mode
+        irq-i           - trigger the IRQ interrupt 
         native          - switch the CPU to native (16-bit) mode
-        reset-i         - Trigger the RESET interrupt 
-        (FEHLT other interrupts)
+        nmi-i           - tritter the NMI interrupt 
+        reset-i         - trigger the RESET interrupt 
         run             - run the emulator continuously
         step            - run one instruction in single-step mode
 
@@ -93,6 +95,11 @@ HALTING THE EMULATION
 
 In many 6502 emulators, the BRK instruction is used to give control back to the emulator. We use the 65816's STP instruction, which halts the processor. After STP, you can resume the emulation with either STEP or RUN from the same spot.  
 
+
+
+EMULATING INTERRUPTS
+
+To test interrupts, place a STP in the code at the place where you want the interrupt to trigger. Run the code until then. When the emulation stops, type the instruction for the interrupt (for instance irq-i) , and then continue the run. 
 
 
 EXECUTING A SINGLE INSTRUCTION
@@ -146,7 +153,7 @@ see http://forum.6502.org/viewtopic.php?f=8&t=3459&p=40389#p40370
 
 KNOWN ISSUES 
 
-- Wrapping addresses is currenty not implemented. This will be corrected during ALPHA. 
+- Wrapping addresses is currenty not implemented. This will be corrected during ALPHA with high priority. 
 
 - The Overflow Flag (v) is not correctly set in Decimal mode. See http://www.6502.org/tutorials/vflag.html and http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html for details. This bug has low priority. 
 

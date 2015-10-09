@@ -3,5 +3,6 @@ Scot W. Stevenson <scot.stevenson@gmail.com>
 
 Add new entries to the top, major changes only
 
-08. Oc6 2015 - All opcodes coded. 
-26. May 2015 - PRE-ALPHA uploaded to Github. 
+09. Oct 2015 - ALPHA uploaded to GitHub. 
+08. Oct 2015 - All opcodes coded. 
+26. May 2015 - PRE-ALPHA uploaded to GitHub. 

@@ -1151,7 +1151,7 @@ cr .( Defining opcode routines themselves ... )
 : opc-86 ( stx.d )  X @  mode.d store.xy ;  
 : opc-87 ( sta.dil )  C> mode.dil store.a ; 
 : opc-88 ( dey )  Y @  1- mask.xy  Y !  check-NZ.y ;
-: opc-89 ( bit.# )  C> mode.imm fetch.a and check-Z ; 
+: opc-89 ( bit.# )  C> mode.imm fetch.a and check-Z PC+a ; 
 : opc-8A ( txa )  X @  >C check-NZ.a ; 
 : opc-8B ( phb )  DBR @  push8 ; 
 : opc-8C ( sty )  Y @  mode.abs.DBR store.xy ;
@@ -1210,7 +1210,7 @@ cr .( Defining opcode routines themselves ... )
 : opc-BD ( lda.x )  mode.x lda-core ;
 : opc-BE ( ldx.y )  mode.y ldx-core ; 
 : opc-BF ( lda.lx )  mode.lx lda-core ;
-: opc-C0 ( cpy.# )  Y @  mode.imm cpxy-core ; 
+: opc-C0 ( cpy.# )  Y @  mode.imm cpxy-core PC+xy ; 
 : opc-C1 ( cmp.dxi )  C> mode.dxi cmp-core ; 
 : opc-C2 ( rep ) rep.a ;
 : opc-C3 ( cmp.s )  C> mode.s cmp-core ; 
@@ -1247,7 +1247,7 @@ cr .( Defining opcode routines themselves ... )
 : opc-DD ( cmp.x )  C> mode.x cmp-core ;  
 : opc-DE ( dec.x )  mode.x dec.mem ; 
 : opc-DF ( cmp.lx ) C> mode.lx cmp-core ;  
-: opc-E0 ( cpx.# )  X @  mode.imm cpxy-core ; 
+: opc-E0 ( cpx.# )  X @  mode.imm cpxy-core PC+xy ; 
 : opc-E1 ( sbc.dxi )  mode.dxi sbc-core ; 
 : opc-E2 ( sep ) sep.a ; 
 : opc-E3 ( sbc.s )  mode.s sbc-core ; 

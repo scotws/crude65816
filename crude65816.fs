@@ -177,7 +177,7 @@ defer fetch.a  defer fetch.xy
 \ so we can use these routines with stuff like stack manipulations
 
 \ FETCH8 includes the check for special addresses (I/O chips, etc) so all other
-\ store words should be based on it
+\ store words must be based on it
 : fetch8  ( 65addr24 -- u8 )  
    special-fetch?  dup 0= if     ( 65addr24 0|xt)
       drop  memory +  c@  else   \ C@ means no MASK8 is required
@@ -190,7 +190,7 @@ defer fetch.a  defer fetch.xy
 defer store.a   defer store.xy
 
 \ STORE8 includes the check for special addresses (I/O chips, etc) so all other
-\ store words should be based on it
+\ store words must be based on it
 : store8 ( u8 65addr24 -- ) 
    special-store?  dup 0= if     ( u8 65addr24 0|xt)
       drop  memory +  c!  else   \ C! means that no MASK is required
@@ -672,36 +672,29 @@ cr .( Defining addressing modes ...)
 \ ## Absolute: "LDA $1000" / "lda 1000" ##
 \ We need two different versions, one for instructions that affect data and take
 \ the DBR, and one for instructions that affect programs and take the PBR
-\ TODO handle page boundries / wrapping
 : mode.abs.DBR ( -- 65addr24 )  next2bytes mem16/DBR>24 PC+2 ;
 : mode.abs.PBR ( -- 65addr24 )  next2bytes mem16/PBR>24 PC+2 ;
 
 \ ## Absolute Indirect: "JMP ($1000)" / "jmp.i 1000" ##
-\ TODO handle page boundries / wrapping
-: mode.i  ( -- 65addr24)  mode.abs.PBR  fetch16  mem16/PBR>24 ;
+: mode.i  ( -- 65addr24)  next2bytes 00 mem16/bank>24 fetch16 mem16/PBR>24 PC+2 ;
 
-\ ## Absolute Indirect LONG (p. 293): "JMP [$1000]" / "jmp.il 1000" ##
-\ TODO handle page boundries / wrapping
-: mode.il  ( -- 65addr24)  next2bytes 00 mem16/bank>24 fetch24 ; 
+\ ## Absolute Indirect LONG: "JMP [$1000]" / "jmp.il 1000" ##
+: mode.il  ( -- 65addr24)  next2bytes 00 mem16/bank>24 fetch24 PC+2 ; 
 
 \ ## Absolute Indexed X/Y (pp. 289-290): "LDA $1000,X" / "lda.x 1000" ##
 \ Assumes that X will be the correct width (8 or 16 bit)
-\ TODO handle page boundries / wrapping
 : mode.x  ( -- 65addr24 )  mode.abs.DBR  X @  + ;
 : mode.y  ( -- 65addr24 )  mode.abs.DBR  Y @  + ;
 
 \ ## Absolute X Indexed Indirect (p. 291): "JMP ($1000,X)" / "jmp.xi 1000" ##
-\ TODO handle page boundries / wrapping
 : mode.xi  ( -- 65addr24 )  next2bytes  X @ +  
-   mask16  PBR @  mem16/bank>24 fetch16 ; 
+   mask16  PBR @  mem16/bank>24  fetch16 PC+2 ; 
 
 \ ## Absolute Long: "LDA $100000" / "lda.l 100000" ##
-\ TODO handle page boundries / wrapping
 : mode.l  ( -- 65addr24)  next3bytes PC+3 ;
 
 \ ## Absolute Long X Indexed: "LDA $100000,X" / "lda.lx 100000" ##  
 \ This assumes that X will be the correct width (8 or 16 bit) 
-\ TODO handle page boundries / wrapping
 : mode.lx ( -- 65addr24)  mode.l  X @  + ; 
 
 \ ## Direct Page (DP) (pp. 94, 155, 278): "LDA $10" / "lda.d 10" ##
@@ -742,7 +735,6 @@ cr .( Defining addressing modes ...)
 
 \ ## Immediate Mode: "LDA #$10" / "lda.# 10" ##
 \ Note that this mode does not advance the PC as it is used with A and XY
-\ TODO handle page boundries / wrapping
 : mode.imm  ( -- 65addr24 )  PC24 ; 
 
 \ ## Stack Relative (p. 324): "LDA $10,S" / "lda.s 10" ##
@@ -944,9 +936,6 @@ cr .( Defining core routines for opcodes )
 : lda-core ( 65addr -- )  fetch.a  >C  check-NZ.a ;
 : ldx-core ( 65addr -- )  fetch.xy  X !  check-NZ.x ;
 : ldy-core ( 65addr -- )  fetch.xy  Y !  check-NZ.y ;
-
-
-
 
 
 \ -- Addition routines -- 

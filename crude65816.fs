@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version ALPHA  09. Oct 2015)  
+cr .( Version ALPHA  13. Oct 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -230,8 +230,8 @@ cr .( Setting up flag routines ... )
 create flags
    false , false , false , false , false , false , false , false , 
 
-\ We start with n-flag, not c-flag, as first entry in the table to make
-\ creating P> with loops easier
+\ We start with n-flag, not c-flag, as first (LSBit) entry in the table to make
+\ creating P> with loops easier. 
 : n-flag ( -- addr ) flags ;           \ bit 7 
 : v-flag ( -- addr ) flags cell + ;    \ bit 6 
 : m-flag ( -- addr ) flags 2 cells + ; \ bit 5 in native mode 
@@ -265,6 +265,8 @@ defer mask-N.a
 defer mask-V.a 
 : mask-V.8 ( u8 -- u8 ) 40 and ; 
 : mask-V.16 ( u16 -- u16 ) 4000 and ; 
+
+: mask-c ( u -- u ) 1 and ; 
 
 \ ---- TEST AND SET FLAGS ----
 
@@ -382,7 +384,7 @@ cr .( Setting up BCD routines ...)
 \ Add two bytes BCD style, including the c-flag. We use this routine for the
 \ 8-bit ADC routine when the d-flag ist set
 : bcd-add-bytes ( u1 u2 -- ur )
-   nibbleweave-add  c-flag @  1 and 
+   nibbleweave-add  c-flag @  mask-c
    bcd-add-nibble >r  ( n2h n1h nc -- R: nl )
    bcd-add-nibble r> nibbles>byte    ( nc nr )
    swap test&set-c ; 
@@ -391,7 +393,7 @@ cr .( Setting up BCD routines ...)
 \ for the 8-bit SBC routine when the d-flag ist set
 : bcd-sub-bytes ( u1 u2 -- ur )
    swap             \ We fetch the operand before we get the accumulator
-   nibbleweave-sub  c-flag @  1 and 
+   nibbleweave-sub  c-flag @  mask-c
    bcd-sub-nibble >r  ( n2h n1h nc -- R: nl )
    bcd-sub-nibble r>  nibbles>byte    ( nc nr )
    swap test&set-c ; 
@@ -844,17 +846,17 @@ cr .( Defining core routines for opcodes )
 : asl-mem ( addr -- )  dup fetch.a asl-core dup check-NZ.TOS swap store.a ; 
 
 \ LSR-CORE is used for all, LSR-MEM for memory shifts
-: lsr-core ( u -- u )  dup 1 and test&set-c  1 rshift ; 
+: lsr-core ( u -- u )  dup mask-c test&set-c  1 rshift ; 
 : lsr-mem ( addr -- )  dup fetch.a lsr-core dup check-NZ.TOS swap store.a ; 
 
 \ ROL-CORE is used for all, ROL-MEM for memory shifts
 : rol-core ( u -- u )  
-   c-flag @  1 and swap  dup mask-N.a test&set-c  1 lshift or ;
+   c-flag @  mask-c swap  dup mask-N.a test&set-c  1 lshift or ;
 : rol-mem ( addr -- )  dup fetch.a rol-core dup check-NZ.TOS swap store.a ; 
 
 \ ROR-CORE is used for all, ROR-MEM for memory shifts
 : ror-core ( u -- u )  
-   c-flag @ mask-N.a swap  dup 1 and test&set-c  1 rshift or ; 
+   c-flag @ mask-N.a swap  dup mask-c test&set-c  1 rshift or ; 
 : ror-mem ( addr -- )  dup fetch.a ror-core dup check-NZ.TOS swap store.a ; 
 
 : bit-core ( 65addr -- ) fetch.a 
@@ -891,7 +893,7 @@ cr .( Defining core routines for opcodes )
 : adc-sbc-core ( u -- ) 
    dup >r      \ save operand for Overflow calculation
    C>  dup >r  \ save accumulator for Overflow calculation 
-   +  c-flag @ 1 and +  dup >C  carry?.a test&set-c  check-NZ.a
+   +  c-flag @ mask-c +  dup >C  carry?.a test&set-c  check-NZ.a
    r> C> or  r> C> or  and  mask-N.a  0<> v-flag ! ;  \ calculate Overflow
 
 \ Common routine for 8- and 16-bit binary addition 
@@ -911,7 +913,7 @@ create additions
    ' adc-bcd.16 , \  8 bit decimal: D set, a16flag set (11)   
 
 : adc-core ( 65addr -- ) 
-   d-flag @ 2 and  a16flag @ 1 and  or  cells  \ calculate table index 
+   d-flag @ 2 and  a16flag @ mask-c  or  cells  \ calculate table index 
    additions +  @ execute ; 
 
 
@@ -938,7 +940,7 @@ create subtractions
    ' sbc-bcd.16 , \  8 bit decimal: D set, a16flag set (11)   
 
 : sbc-core ( 65addr -- ) 
-   d-flag @ 2 and  a16flag @ 1 and  or  cells  \ calculate table index 
+   d-flag @ 2 and  a16flag @ mask-c  or  cells  \ calculate table index 
    subtractions +  @ execute ; 
 
 

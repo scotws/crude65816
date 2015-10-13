@@ -1,7 +1,7 @@
 List of Sources for 6502/65816 tests 
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 05. Okt 2015
-This version: 06. Okt 2015
+This version: 12. Okt 2015
 
 Collect these for future test routines
 
@@ -11,5 +11,15 @@ http://visual6502.org/wiki/index.php?title=6502DecimalMode (8 bit BCD)
 
 TRB/TSB: 
 http://6502.org/tutorials/65c02opcodes.html
+
+VARIOUS: 
+
+http://forum.6502.org/viewtopic.php?f=4&t=712
+
+For example, when e=0, m=0, and B=$12 (DBR), an ASL $FFFF (i.e. absolute addressing) performs a 16-bit shift whose low byte is at $12FFFF and whose high byte is at $130000.
+
+http://forum.6502.org/viewtopic.php?f=2&t=1345
+
+http://www.verycomputer.com/20_f32cfebe2a348b76_1.htm
 
 

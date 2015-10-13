@@ -1,7 +1,7 @@
 Manual for A Crude 65816 Emulator 
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 09. Jan 2015
-This version: 08. Oct 2015
+This version: 13. Oct 2015
 
 
 THIS DOCUMENT IS CURRENTLY MERELY A COLLECTION OF NOTES. WHEN IN DOUBT, USE THE SOURCE CODE. 
@@ -175,6 +175,7 @@ Books:
 Special topics: 
 
 - Interrupt system: http://sbc.bcstechnology.net/65c816interrupts.html [08. Oct 2015]
+- Wrapping on banks and pages: http://forum.6502.org/viewtopic.php?f=8&t=3459&start=30#p40855
 
 
 END

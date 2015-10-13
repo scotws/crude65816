@@ -845,26 +845,26 @@ cr .( Creating output functions ...)
 
 \ MVN starts with the first byte and works forward to avoid overwriting data
 : mvn-slow ( -- ) 
-   C> 0 ?do
+   C> 1+ 0 ?do
       X @  i +  mask16     ( dbb sbb s16 ) \ get source addres w/o bank byte
       over mem16/bank>24   ( dbb sbb src ) \ calculate new every time
-      c@ rot               ( sbb u8 dbb ) 
+      fetch8 rot               ( sbb u8 dbb ) 
       Y @  i +  mask16     ( sbb u8 dbb d16 )
       over mem16/bank>24   ( sbb u8 dbb dest ) 
       swap -rot            ( sbb dbb u8 dest ) 
-      c! swap              ( dbb sbb ) 
+      store8 swap              ( dbb sbb ) 
    loop ; 
 
 \ MVP starts with the last byte and works backwards to avoid overwriting data
 : mvp-slow ( -- )
-   0 C> ?do
+   0 C> 1+ ?do
       X @  i +  mask16     ( dbb sbb s16 ) \ get source addres w/o bank byte
       over mem16/bank>24   ( dbb sbb src ) \ calculate new every time
-      c@ rot               ( sbb u8 dbb ) 
+      fetch8 rot               ( sbb u8 dbb ) 
       Y @  i +  mask16     ( sbb u8 dbb d16 )
       over mem16/bank>24   ( sbb u8 dbb dest ) 
       swap -rot            ( sbb dbb u8 dest ) 
-      c! swap              ( dbb sbb ) 
+      store8 swap              ( dbb sbb ) 
    -1 +loop ; 
 
 : mvn-core ( -- ) 

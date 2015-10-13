@@ -101,6 +101,8 @@ EMULATING INTERRUPTS
 
 To test interrupts, place a STP in the code at the place where you want the interrupt to trigger. Run the code until then. When the emulation stops, type the instruction for the interrupt (for instance irq-i) , and then continue the run. 
 
+Put differently, the emulator is too crude to allow interrupts during the execution of one word. Because of this, the question if MVN and MVP are interruptable is not relevant.
+
 
 EXECUTING A SINGLE INSTRUCTION
 

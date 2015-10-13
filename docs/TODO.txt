@@ -1,7 +1,7 @@
 TODO for A Crude 65816 Emulator
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 27. May 2015
-This version: 08. Oct 2015
+This version: 13. Oct 2015
 
 
 IMMEDIATELY 
@@ -21,6 +21,8 @@ LONG TERM
 NICE TO HAVE 
 
 - Add color output to .STATE, .DIRECT, and .STACK on terminals that support it
+
+- Test to see if Forth's MOVE word is really that much faster than a ?DO loop for the MVP and MVN instructions
 
 
 

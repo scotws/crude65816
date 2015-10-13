@@ -569,8 +569,9 @@ variable xy16flag   xy16flag clear
    X @  00FF AND  X !   Y @  00FF AND  Y !  
    xy16flag clear ; 
 
+
 \ --- STATUS BYTE --- 
-\ These routines have to come after mode switches for the registers 
+\ These routines must come after mode switches for the registers 
 
 \ In native mode, changing m and x flags might change the size of these
 \ registers 
@@ -822,14 +823,71 @@ cr .( Creating output functions ...)
 
 \ ---- BLOCK MOVE INSTRUCTIONS ----
 
-\ TODO see if we need to mask X and Y in the last line 
-: move.a ( -- ) 
-   next1byte  dup >r  PC+1  \ remember, this is the destination byte
-   next1byte PC+1 
-   X @  swap mem16/bank>24  memory +  \ full source address
-   swap Y @  swap mem16/bank>24  memory +  \ full destination address
-   C @  1+  move 
-   0ffff C !  1 X +!  1 Y +!  r> DBR ! ; \ fake the results of the loop
+\ It would be really, really nice if we could just use Forth's MOVE word for
+\ this. However, MVP and MVN both wrap at the block boundry, so that won't work,
+\ see http://6502.org/tutorials/65c816opcodes.html#5.19 . Because we assume
+\ MOVE is a lot faster than a loop, we use it for the cases where there is no
+\ wrapping, and fall back on slower loop constructs otherwise. Remember
+\ C is number of bytes to be moved minus one, and the first operand is the
+\ destinantion bank byte, not the source. The return values are faked. 
+\ TODO Actually measure time difference between MOVE and LOOP variants
+\ TODO Factor words once we know they are working 
+
+: move-without-wrap? ( -- f ) 
+   X @  C @  +  0ffff <=   
+   Y @  C @  +  0ffff <=  and ; 
+
+\ This is the best case, because fastest
+: no-wrap-move ( dest src -- ) 
+     X @  swap mem16/bank>24  memory +  \ full source address
+     swap Y @  swap mem16/bank>24  memory +  \ full destination address
+     C @  1+  move ; 
+
+\ MVN starts with the first byte and works forward to avoid overwriting data
+: mvn-slow ( -- ) 
+   C> 0 ?do
+      X @  i +  mask16     ( dbb sbb s16 ) \ get source addres w/o bank byte
+      over mem16/bank>24   ( dbb sbb src ) \ calculate new every time
+      c@ rot               ( sbb u8 dbb ) 
+      Y @  i +  mask16     ( sbb u8 dbb d16 )
+      over mem16/bank>24   ( sbb u8 dbb dest ) 
+      swap -rot            ( sbb dbb u8 dest ) 
+      c! swap              ( dbb sbb ) 
+   loop ; 
+
+\ MVP starts with the last byte and works backwards to avoid overwriting data
+: mvp-slow ( -- )
+   0 C> ?do
+      X @  i +  mask16     ( dbb sbb s16 ) \ get source addres w/o bank byte
+      over mem16/bank>24   ( dbb sbb src ) \ calculate new every time
+      c@ rot               ( sbb u8 dbb ) 
+      Y @  i +  mask16     ( sbb u8 dbb d16 )
+      over mem16/bank>24   ( sbb u8 dbb dest ) 
+      swap -rot            ( sbb dbb u8 dest ) 
+      c! swap              ( dbb sbb ) 
+   -1 +loop ; 
+
+: mvn-core ( -- ) 
+   next1byte  dup >r  PC+1  \ destination bank byte (!) next1byte
+   next1byte PC+1           \ source bank byte 
+
+   move-without-wrap? if 
+      no-wrap-move else 
+   mvn-slow then 
+
+   \ fake the results of the loop
+   0ffff C !  1 X +!  1 Y +!  r> DBR ! ; 
+
+: mvp-core ( -- ) 
+   next1byte  dup >r  PC+1  \ destination bank byte (!) next1byte
+   next1byte PC+1           \ source bank byte 
+
+   move-without-wrap? if 
+      no-wrap-move else 
+   mvn-slow then 
+
+   \ fake the results of the loop
+   0ffff C !  1 X +!  1 Y +!  r> DBR ! ; 
 
 
 \ ---- OPCODE CORE ROUTINES ----
@@ -873,8 +931,8 @@ cr .( Defining core routines for opcodes )
    C> or swap store.a ; 
 
 \ INC and DEC for the Accumulator
-: inc.accu ( -- ) C> 1+ mask.a dup check-NZ.a >C ; 
-: dec.accu ( -- ) C> 1- mask.a dup check-NZ.a >C ; 
+: inc.accu ( -- ) C> 1+ mask.a >C check-NZ.a ; 
+: dec.accu ( -- ) C> 1- mask.a >C check-NZ.a ; 
 
 \ INC and DEC for memory
 : inc.mem  ( 65addr -- )  dup fetch.a 1+ mask.a dup check-NZ.TOS swap store.a ; 
@@ -886,6 +944,10 @@ cr .( Defining core routines for opcodes )
 : lda-core ( 65addr -- )  fetch.a  >C  check-NZ.a ;
 : ldx-core ( 65addr -- )  fetch.xy  X !  check-NZ.x ;
 : ldy-core ( 65addr -- )  fetch.xy  Y !  check-NZ.y ;
+
+
+
+
 
 \ -- Addition routines -- 
 
@@ -1020,7 +1082,7 @@ cr .( Defining opcode routines themselves ... )
 : opc-42 ( wdm ) cr cr ." WARNING: WDM executed at " 
    PBR @ .mask8  PC @ .mask16  PC+1 ; 
 : opc-43 ( eor.s )  mode.s eor-core ; 
-: opc-44 ( mvp )  move.a ;  
+: opc-44 ( mvp )  mvp-core ;  
 : opc-45 ( eor.d )  mode.d eor-core ; 
 : opc-46 ( lsr.d )   mode.d lsr-mem ; 
 : opc-47 ( eor.dil )  mode.dil eor-core ;  
@@ -1036,7 +1098,7 @@ cr .( Defining opcode routines themselves ... )
 : opc-51 ( eor.diy )  mode.diy eor-core ;  
 : opc-52 ( eor.di )  mode.di eor-core ; 
 : opc-53 ( eor.siy )  mode.siy eor-core ; 
-: opc-54 ( mvn )  move.a ; 
+: opc-54 ( mvn )  mvn-core ; 
 : opc-55 ( eor.dx )   mode.dx eor-core ; 
 : opc-56 ( lsr.dx ) mode.dx lsr-mem ; 
 : opc-57 ( eor.dily )  mode.dily eor-core ; 
@@ -1160,7 +1222,8 @@ cr .( Defining opcode routines themselves ... )
 : opc-C9 ( cmp.# )  C> mode.imm cmp-core PC+a ; 
 : opc-CA ( dex )  X @  1- mask.xy  X !  check-NZ.x ;
 : opc-CB ( wai )  cr cr 
-   ." *** WAI instruction, halting processor ***" cr 
+   ." *** WAI encountered at " PC24 .mask24 
+   ." Resume with STEP, RUN or interrupt ***" cr
    .state quit ; 
 : opc-CC ( cpy )  Y @  mode.abs.DBR cpxy-core ; 
 : opc-CD ( cmp )  C> mode.abs.DBR cmp-core ; 

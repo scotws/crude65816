@@ -11,14 +11,14 @@
 \  00e000 s" rom65816.bin" loadrom  \ operating system, BIOS, *DEFAULT*
 
 \ Test of 8-bit Forth system as demo. Putchr must be f001, getchr f004
-00c000 s" tests/taliforth.bin" loadrom     
+\ 00c000 s" tests/taliforth.bin" loadrom     
 
 \ Dummy file to show how ROM data is loaded. Later, these can be program
 \ libraries or other ROM chips.
 \ 800000 s" data.bin"  loadrom
 
 \ Test program from assembler, for ALPHA only 
-\  00e000 s" ../tasm65816/rom.bin" loadrom   
+00e000 s" ../tasm65816/rom.bin" loadrom   
 
 
 \  --- DEFINITIONS --- 

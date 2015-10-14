@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 09. Jan 2015
-\ This version: 13. Oct 2015
+\ This version: 14. Oct 2015
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version ALPHA  13. Oct 2015)  
+cr .( Version ALPHA  14. Oct 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -45,6 +45,8 @@ variable D     \ Direct register (Zero Page on 6502) (16 bit)
 variable S     \ Stack Pointer (8/16 bit)
 variable DBR   \ Data Bank register ("B") (8 bit)
 variable PBR   \ Program Bank register ("K") (8 bit)
+
+variable current-opcode
 
 \ Vectors for interrupts
 00fffc constant reset-v   \ same for emulated and native modes
@@ -130,9 +132,16 @@ defer C>  \ TODO see if this should be A|C>
 : 24>PC24!  ( 65addr24 -- )  24>lsb/msb/bank  PBR !  lsb/msb>16  PC ! ; 
 
 \ Convert various combinations to full 24 bit address. Assumes HEX 
-: mem16/bank>24  ( 65addr16 bank -- 65addr24 )  10 lshift or ; 
+\ Paranoid: Makes sure that 16 bit address is really only 16 bit
+: mem16/bank>24  ( 65addr16 bank -- 65addr24 )  
+   swap mask16 swap  10 lshift or ; 
 : mem16/PBR>24  ( 65addr16 -- 65addr24 )  PBR @  mem16/bank>24 ; 
 : mem16/DBR>24  ( 65addr16 -- 65addr24 )  DBR @  mem16/bank>24 ; 
+
+\ Create a full 24 bit address that is in bank zero. In other words, wrap to
+\ bank zero 
+: mem16/bank00>24   ( 65addr16 -- 65addr24 )   00 mem16/bank>24 ; 
+
 : lsb/msb/bank>24  ( lsb msb bank -- 65addr24 )  
    -rot lsb/msb>16 swap mem16/bank>24 ; 
 
@@ -667,81 +676,124 @@ cr .( Defining addressing modes ...)
 \ Examples for the modes are given for the traditional syntax and for Typist's
 \ Assembler
 
-: mode.d-core ( -- 65addr16 )  next1byte D @ + ; 
-
-\ ## Absolute: "LDA $1000" / "lda 1000" ##
+\ Absolute: "LDA $1000" / "lda 1000" #
 \ We need two different versions, one for instructions that affect data and take
 \ the DBR, and one for instructions that affect programs and take the PBR
 : mode.abs.DBR ( -- 65addr24 )  next2bytes mem16/DBR>24 PC+2 ;
 : mode.abs.PBR ( -- 65addr24 )  next2bytes mem16/PBR>24 PC+2 ;
 
-\ ## Absolute Indirect: "JMP ($1000)" / "jmp.i 1000" ##
+\ Absolute Indirect: "JMP ($1000)" / "jmp.i 1000"
 : mode.i  ( -- 65addr24)  next2bytes 00 mem16/bank>24 fetch16 mem16/PBR>24 PC+2 ;
 
-\ ## Absolute Indirect LONG: "JMP [$1000]" / "jmp.il 1000" ##
+\ Absolute Indirect LONG: "JMP [$1000]" / "jmp.il 1000"
 : mode.il  ( -- 65addr24)  next2bytes 00 mem16/bank>24 fetch24 PC+2 ; 
 
-\ ## Absolute Indexed X/Y (pp. 289-290): "LDA $1000,X" / "lda.x 1000" ##
+\ Absolute Indexed X/Y (pp. 289-290): "LDA $1000,X" / "lda.x 1000"
 \ Assumes that X will be the correct width (8 or 16 bit)
 : mode.x  ( -- 65addr24 )  mode.abs.DBR  X @  + ;
 : mode.y  ( -- 65addr24 )  mode.abs.DBR  Y @  + ;
 
-\ ## Absolute X Indexed Indirect (p. 291): "JMP ($1000,X)" / "jmp.xi 1000" ##
+\ Absolute X Indexed Indirect (p. 291): "JMP ($1000,X)" / "jmp.xi 1000"
 : mode.xi  ( -- 65addr24 )  next2bytes  X @ +  
    mask16  PBR @  mem16/bank>24  fetch16 PC+2 ; 
 
-\ ## Absolute Long: "LDA $100000" / "lda.l 100000" ##
+\ Absolute Long: "LDA $100000" / "lda.l 100000"
 : mode.l  ( -- 65addr24)  next3bytes PC+3 ;
 
-\ ## Absolute Long X Indexed: "LDA $100000,X" / "lda.lx 100000" ##  
-\ This assumes that X will be the correct width (8 or 16 bit) 
+\ Absolute Long X Indexed: "LDA $100000,X" / "lda.lx 100000"
+\ assumes that X will be the correct width (8 or 16 bit) 
 : mode.lx ( -- 65addr24)  mode.l  X @  + ; 
+\
+\ Immediate Mode: "LDA #$10" / "lda.# 10"
+\ Note that this mode does not advance the PC as it is used with A and XY so we
+\ have to do this by hand in the instructions themselves. Failure to do so was
+\ a common error during development
+: mode.imm  ( -- 65addr24 )  PC24 ; 
 
-\ ## Direct Page (DP) (pp. 94, 155, 278): "LDA $10" / "lda.d 10" ##
-\ Note that D can be relocated in Emulated Mode as well, see
-\ http://forum.6502.org/viewtopic.php?f=8&t=3459&p=40389#p40370 for details
+
+\ -- DIRECT PAGE MODES --
+
+\ DP modes are a serious pain because of emulation mode and the difference
+\ between page and bank wrapping. See
+\ http://forum.6502.org/viewtopic.php?f=8&t=3459&start=30#p40855 . 
+
+\ We only wrap to the current page if all following three conditions are true:
+\ We are in emulation mode, the LSB of D is zero (that is, D is on a page
+\ boundry), and we are dealing with an old opcode that was available on the
+\ 65c02. Test 1 is already defined via e-flag
+\ TODO make this a more general word to test page boundries; change name
+: zero-dl? ( -- f )  D @  mask8 0= ;   \ TEST 2 
+
+\ The new DP opcodes with indexing which are never ever wrapped to the page are
+\ all have the LSB of 7, that is, 07, 17, etc in HEX. This means we don't have
+\ to check them in a table, but can use a function
+: old-dp-opcode? ( u8 -- f )  mask8  7 = invert ;  \ TEST 3
+
+\ We do the first test first because we assume that most people are going to run
+\ the MPU in native mode and we get to quit earlier then
+: wrap2page? ( -- f )  e-flag set?  zero-dl? and  old-dp-opcode? and ; 
+
+\ Given the result of adding D with the byte given by the user and the X or
+\ Y index, wrap correctly to page if necessary
+: add&wrap ( u16 u8|u16 -- u16 ) 
+   wrap2page? if 
+      over + mask8   \ discard MSB of addition, keeping LSB
+      swap 0ff00 and \ keep MSB of D, thereby wrapping
+      or else              
+      + then ;       \ no page wrap, so just add; caller will wrap to bank 
+
+\ If this wraps the page, it means be definition that the LSB of D was not zero,
+\ and so the legacy rules don't apply one way or another
+: mode.d-core ( -- 65addr16 )  next1byte D @ +  PC+1 ; 
+
+\ Direct Page (DP) (pp. 94, 155, 278): "LDA $10" / "lda.d 10"
+\ Note that D can be relocated in emulated mode as well, see
+\ http://forum.6502.org/viewtopic.php?f=8&t=3459&p=40389#p40370 
+: mode.d  ( -- 65addr24)  mode.d-core  mem16/bank00>24 ;
+
+\ DP Indexed X/Y (p. 299): "LDA $10,X" / "lda.dx 10"
 \ TODO handle page boundries / wrapping
-: mode.d  ( -- 65addr24)  mode.d-core   00  mem16/bank>24 PC+1 ;
+: mode.dx  ( -- 65addr24)  mode.d-core  X @ +  mem16/bank00>24 ; 
+: mode.dy  ( -- 65addr24)  mode.d-core  Y @ +  mem16/bank00>24 ; 
 
-\ ## DP Indexed X/Y (p. 299): "LDA $10,X" / "lda.dx 10" ##
-\ TODO handle page boundries / wrapping
-: mode.dx  ( -- 65addr24)  mode.d-core  X @ +  0 mem16/bank>24 PC+1 ; 
-: mode.dy  ( -- 65addr24)  mode.d-core  Y @ +  0 mem16/bank>24 PC+1 ; 
-
-\ ## DP Indirect  (p. 302):  "LDA ($10)" / "lda.di 10" ##
+\ DP Indirect  (p. 302):  "LDA ($10)" / "lda.di 10"
 \ Note this uses the Data Bank Register DBR, not PBR
-\ TODO handle page boundries / wrapping
 : mode.di  ( -- 65addr24)  
-   mode.d-core  00 mem16/bank>24  fetch16  DBR @  mem16/bank>24 PC+1 ;
+   mode.d-core  00 mem16/bank>24  fetch16  DBR @  mem16/bank>24 ;
 
-\ ## DP Indirect X Indexed (p. 300): "LDA ($10,X)" / "lda.dxi 10" ##
+\ DP Indirect X Indexed (p. 300): "LDA ($10,X)" / "lda.dxi 10"
 \ TODO handle page boundries / wrapping
-: mode.dxi  ( -- 65addr24)  mode.d-core  X @ +  00 mem16/bank>24 
-   fetch16  DBR @ mem16/bank>24 PC+1 ; 
+: mode.dxi  ( -- 65addr24)  
+   mode.d-core  X @ +  mem16/bank00>24 
+   fetch16  DBR @ mem16/bank>24 ; 
 
-\ ## DP Indirect Y Indexed (p. 304): "LDA ($10),Y" / "lda.diy 10" ##
+\ DP Indirect Y Indexed (p. 304): "LDA ($10),Y" / "lda.diy 10"
 \ Does not need a "PC+1" because this is contained in MODE.DI
 \ TODO handle page boundries / wrapping
 : mode.diy  ( -- 65addr24)  mode.di  Y @ + ; 
 
-\ ## DP Indirect Long: "LDA [$10]" / "lda.dil 10" ##
-\ TODO handle page boundries / wrapping
-: mode.dil  ( -- 65addr24) mode.d-core  00 mem16/bank>24 fetch24 PC+1 ; 
+\ DP Indirect Long: "LDA [$10]" / "lda.dil 10"
+: mode.dil  ( -- 65addr24) mode.d-core  mem16/bank00>24 fetch24 ; 
 \
-\ ## DP Indirect Long Y Addressing : "LDA [$10],y" / "lda.dily 10" ##
+\ DP Indirect Long Y Addressing : "LDA [$10],y" / "lda.dily 10"
 \ TODO handle page boundries / wrapping 
 \ TODO KNOWN ISSUE: WRAPING BROKEN IF Y IN 16 BIT MODE
 : mode.dily  ( -- 65addr24) mode.dil  Y @ + ; 
 
-\ ## Immediate Mode: "LDA #$10" / "lda.# 10" ##
-\ Note that this mode does not advance the PC as it is used with A and XY
-: mode.imm  ( -- 65addr24 )  PC24 ; 
 
-\ ## Stack Relative (p. 324): "LDA $10,S" / "lda.s 10" ##
+\ -- STACK MODES -- 
+\ As DP modes, these are a pain, see same link for details
+
+: old-s-opcode? ; \ TODO 
+
+\ We only wrap to page 01, bank 00 if these two conditions are true 
+: page-wrap-s? ( -- f )  e-flag set?  old-s-opcode? and ; 
+
+\ Stack Relative (p. 324): "LDA $10,S" / "lda.s 10"
 \ TODO handle page boundries / wrapping
-: mode.s  ( -- 65addr24 ) next1byte  S @  +  0 mem16/bank>24 PC+1 ; 
+: mode.s ( -- 65addr24 ) next1byte  S @  +  mem16/bank00>24 PC+1 ; 
 
-\ ## Stack Relative Y Indexed: "LDA (10,S),Y" / "lda.siy 10" ##
+\ Stack Relative Y Indexed: "LDA (10,S),Y" / "lda.siy 10"
 \ No "PC+1" because this is handled by MODE.S
 \ TODO handle page boundries / wrapping
 : mode.siy  ( -- 65addr24 )  mode.s  Y @ +  DBR @  mem16/bank>24 ; 
@@ -998,14 +1050,17 @@ create subtractions
 \ ---- OPCODE ROUTINES ----
 cr .( Defining opcode routines themselves ... ) 
 
+\ We note "new" instructions (not available on the 65c02) for DP and S modes
+\ here for reference, see modes
+
 : opc-00 ( brk )  brk.a ; 
 : opc-01 ( ora.dxi )  mode.dxi ora-core ; 
 : opc-02 ( cop )  cop.a ; 
-: opc-03 ( ora.s )   mode.s ora-core ; 
+: opc-03 ( ora.s )   mode.s ora-core ;  \ New S opcode
 : opc-04 ( tsb.d )  mode.d tsb-core ; 
 : opc-05 ( ora.d )  mode.d ora-core ; 
 : opc-06 ( asl.d )  mode.d asl-mem ; 
-: opc-07 ( ora.dil )  mode.dil ora-core ; 
+: opc-07 ( ora.dil )  mode.dil ora-core ; \ New DP opcode
 : opc-08 ( php )  P> push8 ; 
 : opc-09 ( ora.# )  mode.imm ora-core PC+a ;
 : opc-0A ( asl.a )  C> asl-core >C check-NZ.a ;  
@@ -1017,11 +1072,11 @@ cr .( Defining opcode routines themselves ... )
 : opc-10 ( bpl )  n-flag clear?  branch-if-true ; 
 : opc-11 ( ora.diy )  mode.diy ora-core ; 
 : opc-12 ( ora.di )  mode.di ora-core ; 
-: opc-13 ( ora.siy )  mode.siy ora-core ;  
+: opc-13 ( ora.siy )  mode.siy ora-core ;   \ New S opcode
 : opc-14 ( trb.d )  mode.d trb-core ;  
 : opc-15 ( ora.dx )  mode.dx ora-core ; 
 : opc-16 ( asl.dx )  mode.dx asl-mem ;  
-: opc-17 ( ora.dily )  mode.dily ora-core ;  
+: opc-17 ( ora.dily )  mode.dily ora-core ;  \ New DP opcode
 : opc-18 ( clc )  c-flag clear ; 
 : opc-19 ( ora.y )   mode.y ora-core ; 
 : opc-1A ( inc.a )   inc.accu ;
@@ -1037,11 +1092,11 @@ cr .( Defining opcode routines themselves ... )
 : opc-20 ( jsr )  PC @ 1+  push16 next2bytes  PC ! ;
 : opc-21 ( and.dxi )  mode.dxi and-core ; 
 : opc-22 ( jsr.l )  PC24  2 +  push24 next3bytes 24>PC24! ;
-: opc-23 ( and.s )  mode.s and-core ; 
+: opc-23 ( and.s )  mode.s and-core ;  \ New S opcode
 : opc-24 ( bit.d )  mode.d bit-core ; 
 : opc-25 ( and.d )  mode.d and-core ; 
 : opc-26 ( rol.d )  mode.d rol-mem ;  
-: opc-27 ( and.dil )  mode.dil and-core ;  
+: opc-27 ( and.dil )  mode.dil and-core ;  \ New DP opcode 
 : opc-28 ( plp )  pull8 >P ; 
 : opc-29 ( and.# )  mode.imm and-core PC+a ; 
 : opc-2A ( rol.a )  C> rol-core >C check-NZ.a ;  
@@ -1053,11 +1108,11 @@ cr .( Defining opcode routines themselves ... )
 : opc-30 ( bmi )  n-flag set? branch-if-true ; 
 : opc-31 ( and.diy )   mode.diy and-core ;
 : opc-32 ( and.di )  mode.di and-core ; 
-: opc-33 ( and.siy )  mode.siy and-core ; 
+: opc-33 ( and.siy )  mode.siy and-core ; \ New S opcode
 : opc-34 ( bit.dx )  mode.dx bit-core ; 
 : opc-35 ( and.dx )  mode.dx and-core ; 
 : opc-36 ( rol.dx )  mode.dx rol-mem ; 
-: opc-37 ( and.dily )  mode.dily and-core ; 
+: opc-37 ( and.dily )  mode.dily and-core ; \ New DP opcode
 : opc-38 ( sec )  c-flag set ;  
 : opc-39 ( and.y )  mode.y and-core ; 
 : opc-3A ( dec.a )  dec.accu ;
@@ -1067,14 +1122,14 @@ cr .( Defining opcode routines themselves ... )
 : opc-3E ( rol.x )  mode.x rol-mem ; 
 : opc-3F ( and.lx )  mode.lx and-core ; 
 : opc-40 ( rti )   rti.a ; 
-: opc-41 ( eor.dxi )  mode.dxi eor-core ; 
+: opc-41 ( eor.dxi )  mode.dxi eor-core ;  
 : opc-42 ( wdm ) cr cr ." WARNING: WDM executed at " 
    PBR @ .mask8  PC @ .mask16  PC+1 ; 
-: opc-43 ( eor.s )  mode.s eor-core ; 
+: opc-43 ( eor.s )  mode.s eor-core ; \ New S opcode
 : opc-44 ( mvp )  mvp-core ;  
 : opc-45 ( eor.d )  mode.d eor-core ; 
 : opc-46 ( lsr.d )   mode.d lsr-mem ; 
-: opc-47 ( eor.dil )  mode.dil eor-core ;  
+: opc-47 ( eor.dil )  mode.dil eor-core ;  \ New DP opcode
 : opc-48 ( pha )  C> push.a ; 
 : opc-49 ( eor.# )  mode.imm eor-core PC+a ;
 : opc-4A ( lsr.a )  C> lsr-core >C check-NZ.a ;  
@@ -1086,11 +1141,11 @@ cr .( Defining opcode routines themselves ... )
 : opc-50 ( bvc )  v-flag clear? branch-if-true ; 
 : opc-51 ( eor.diy )  mode.diy eor-core ;  
 : opc-52 ( eor.di )  mode.di eor-core ; 
-: opc-53 ( eor.siy )  mode.siy eor-core ; 
+: opc-53 ( eor.siy )  mode.siy eor-core ; \ New S opcode
 : opc-54 ( mvn )  mvn-core ; 
 : opc-55 ( eor.dx )   mode.dx eor-core ; 
 : opc-56 ( lsr.dx ) mode.dx lsr-mem ; 
-: opc-57 ( eor.dily )  mode.dily eor-core ; 
+: opc-57 ( eor.dily )  mode.dily eor-core ; \ New DP opcode
 : opc-58 ( cli )  i-flag clear ;  
 : opc-59 ( eor.y )  mode.y eor-core ; 
 : opc-5A ( phy )  Y @ push.xy ; 
@@ -1102,11 +1157,11 @@ cr .( Defining opcode routines themselves ... )
 : opc-60 ( rts )  pull16 1+  PC ! ;
 : opc-61 ( adc.dxi )  mode.dxi adc-core ; 
 : opc-62 ( phe.r )  next2bytes PC @ + push16 PC+2 ; 
-: opc-63 ( adc.s )  mode.s adc-core ; 
+: opc-63 ( adc.s )  mode.s adc-core ;  \ New S opcode
 : opc-64 ( stz.d )  0 mode.d store.a ; 
 : opc-65 ( adc.d )  mode.d adc-core ;  
 : opc-66 ( ror.d )  mode.d ror-mem ; 
-: opc-67 ( adc.dil )  mode.dil adc-core ; 
+: opc-67 ( adc.dil )  mode.dil adc-core ; \ New DP opcode 
 : opc-68 ( pla )  pull.a >C check-NZ.a ; 
 : opc-69 ( adc.# )  mode.imm adc-core PC+a ; 
 : opc-6A ( ror.a )  C> ror-core >C check-NZ.a ;  
@@ -1116,13 +1171,13 @@ cr .( Defining opcode routines themselves ... )
 : opc-6E ( ror )   mode.abs.DBR ror-mem ; 
 : opc-6F ( adc.l )  mode.l adc-core ; 
 : opc-70 ( bvs )  v-flag set? branch-if-true ;  
-: opc-71 ( adc.diy )  mode.diy adc-core ; 
+: opc-71 ( adc.diy )  mode.diy adc-core ;  
 : opc-72 ( adc.di )  mode.di  adc-core ; 
-: opc-73 ( adc.siy )  mode.siy adc-core ; 
+: opc-73 ( adc.siy )  mode.siy adc-core ; \ New S opcode 
 : opc-74 ( stz.dx )  0 mode.dx store.a ; 
 : opc-75 ( adc.dx)  mode.dx adc-core ; 
 : opc-76 ( ror.dx )  mode.dx ror-mem ;
-: opc-77 ( adc.dily )  mode.dily adc-core ; 
+: opc-77 ( adc.dily )  mode.dily adc-core ; \ New DP opcode
 : opc-78 ( sei ) i-flag set ; 
 : opc-79 ( adc.y )  mode.y adc-core ; 
 : opc-7A ( ply )  pull.xy  Y !  check-NZ.y ;
@@ -1134,11 +1189,11 @@ cr .( Defining opcode routines themselves ... )
 : opc-80 ( bra )  takebranch ;
 : opc-81 ( sta.dxi )  C> mode.dxi store.a ; 
 : opc-82 ( bra.l )  next2bytes signextend.l  2 +  PC ! ; 
-: opc-83 ( sta.s )  C> mode.s store.a ;  
+: opc-83 ( sta.s )  C> mode.s store.a ;  \ New S opcode 
 : opc-84 ( sty.d )  Y @  mode.d store.xy ;
 : opc-85 ( sta.d )  C> mode.d store.a ; 
 : opc-86 ( stx.d )  X @  mode.d store.xy ;  
-: opc-87 ( sta.dil )  C> mode.dil store.a ; 
+: opc-87 ( sta.dil )  C> mode.dil store.a ; \ New DP opcode
 : opc-88 ( dey )  Y @  1- mask.xy  Y !  check-NZ.y ;
 : opc-89 ( bit.# )  C> mode.imm fetch.a and check-Z PC+a ; 
 : opc-8A ( txa )  X @  >C check-NZ.a ; 
@@ -1150,11 +1205,11 @@ cr .( Defining opcode routines themselves ... )
 : opc-90 ( bcc )  c-flag clear? branch-if-true ; 
 : opc-91 ( sta.diy )  C> mode.diy store.a ;  
 : opc-92 ( sta.di ) C> mode.di store.a ;
-: opc-93 ( sta.siy )  C> mode.siy store.a ;  
+: opc-93 ( sta.siy )  C> mode.siy store.a ;  \ New S opcode
 : opc-94 ( sty.dx )  Y @  mode.dx store.xy ; 
 : opc-95 ( sta.dx )  C> mode.dx store.a ; 
 : opc-96 ( stx.dy )  X @  mode.dy store.xy ; 
-: opc-97 ( sta.dily )  C> mode.dily store.a ;  
+: opc-97 ( sta.dily )  C> mode.dily store.a ; \ New DP opcode
 : opc-98 ( tya )  Y @  >C check-NZ.a ; 
 : opc-99 ( sta.y )  C> mode.y store.a ; 
 : opc-9A ( txs ) 
@@ -1170,15 +1225,15 @@ cr .( Defining opcode routines themselves ... )
 : opc-A0 ( ldy.# )  mode.imm ldy-core PC+xy ;
 : opc-A1 ( lda.dxi )  mode.dxi lda-core ; 
 : opc-A2 ( ldx.# )  mode.imm ldx-core PC+xy ;
-: opc-A3 ( lda.s )  mode.s lda-core ; 
+: opc-A3 ( lda.s )  mode.s lda-core ;  \ New S opcode
 : opc-A4 ( ldy.d )  mode.d ldy-core ; 
 : opc-A5 ( lda.d )  mode.d lda-core ; 
 : opc-A6 ( ldx.d )  mode.d ldx-core ; 
-: opc-A7 ( lda.dil )  mode.dil lda-core ; 
+: opc-A7 ( lda.dil )  mode.dil lda-core ; \ New DP opcode
 : opc-A8 ( tay )  C @  mask.xy  Y !  check-NZ.y ; 
 : opc-A9 ( lda.# ) mode.imm lda-core PC+a ; 
 : opc-AA ( tax )  C @  mask.xy  X !  check-NZ.x ; 
-: opc-AB ( plb )  pull8 dup check-NZ.8 DBR ! ; \ CHECK-NZ.8 consumes TOS
+: opc-AB ( plb )  pull8 dup check-NZ.8 DBR ! ; 
 : opc-AC ( ldy )  mode.abs.DBR ldy-core ; 
 : opc-AD ( lda )  mode.abs.DBR lda-core ;
 : opc-AE ( ldx )  mode.abs.DBR ldx-core ; 
@@ -1186,11 +1241,11 @@ cr .( Defining opcode routines themselves ... )
 : opc-B0 ( bcs )  c-flag set? branch-if-true ;  
 : opc-B1 ( lda.diy )   mode.diy lda-core ; 
 : opc-B2 ( lda.di )  mode.di lda-core ; 
-: opc-B3 ( lda.siy )  mode.siy lda-core ;  
+: opc-B3 ( lda.siy )  mode.siy lda-core ;  \ New S opcode
 : opc-B4 ( ldy.dx )  mode.dx ldy-core ; 
 : opc-B5 ( lda.dx )  mode.dx lda-core ;
 : opc-B6 ( ldx.dy )  mode.dy ldx-core ; 
-: opc-B7 ( lda.dily )  mode.dily lda-core ; 
+: opc-B7 ( lda.dily )  mode.dily lda-core ; \ New DP opcode
 : opc-B8 ( clv ) v-flag clear ; 
 : opc-B9 ( lda.y )  mode.y fetch.a check-NZ.a ;
 : opc-BA ( tsx )  S @  xy16flag clear? if mask8 then  X !  check-NZ.x ;  
@@ -1202,11 +1257,11 @@ cr .( Defining opcode routines themselves ... )
 : opc-C0 ( cpy.# )  Y @  mode.imm cpxy-core PC+xy ; 
 : opc-C1 ( cmp.dxi )  C> mode.dxi cmp-core ; 
 : opc-C2 ( rep ) rep.a ;
-: opc-C3 ( cmp.s )  C> mode.s cmp-core ; 
+: opc-C3 ( cmp.s )  C> mode.s cmp-core ;  \ New S opcode
 : opc-C4 ( cpy.d )  Y @  mode.d cpxy-core ; 
 : opc-C5 ( cmp.d )   C> mode.d cmp-core ;
 : opc-C6 ( dec.d )  mode.d dec.mem ;
-: opc-C7 ( cmp.dil )  C> mode.dil cmp-core ;  
+: opc-C7 ( cmp.dil )  C> mode.dil cmp-core ; \ New DP opcode 
 : opc-C8 ( iny )   Y @  1+  mask.xy  Y !  check-NZ.y ;
 : opc-C9 ( cmp.# )  C> mode.imm cmp-core PC+a ; 
 : opc-CA ( dex )  X @  1- mask.xy  X !  check-NZ.x ;
@@ -1221,11 +1276,11 @@ cr .( Defining opcode routines themselves ... )
 : opc-D0 ( bne )  z-flag clear? branch-if-true ; 
 : opc-D1 ( cmp.diy )  C> mode.diy cmp-core ; 
 : opc-D2 ( cmp.di )  C> mode.di cmp-core ; 
-: opc-D3 ( cmp.siy )  C> mode.siy cmp-core ; 
+: opc-D3 ( cmp.siy )  C> mode.siy cmp-core ;  \ New S opcode 
 : opc-D4 ( phe.d )  mode.d fetch16 push16 ; \ pp. 169, 373
 : opc-D5 ( cmp.dx )  C> mode.dx cmp-core ; 
 : opc-D6 ( dec.dx )  mode.dx dec.mem ; 
-: opc-D7 ( cmp.dily )  C> mode.dily cmp-core ; 
+: opc-D7 ( cmp.dily )  C> mode.dily cmp-core ; \ New DP opcode 
 : opc-D8 ( cld )  d-flag clear ;  
 : opc-D9 ( cmp.y )  C> mode.y cmp-core ; 
 : opc-DA ( phx )  X @  push.xy ;
@@ -1239,11 +1294,11 @@ cr .( Defining opcode routines themselves ... )
 : opc-E0 ( cpx.# )  X @  mode.imm cpxy-core PC+xy ; 
 : opc-E1 ( sbc.dxi )  mode.dxi sbc-core ; 
 : opc-E2 ( sep ) sep.a ; 
-: opc-E3 ( sbc.s )  mode.s sbc-core ; 
+: opc-E3 ( sbc.s )  mode.s sbc-core ; \ New S opcode
 : opc-E4 ( cpx.d )  X @  mode.d cpxy-core ; 
 : opc-E5 ( sbc.d )  mode.d sbc-core ; 
 : opc-E6 ( inc.d )  mode.d inc.mem ; 
-: opc-E7 ( sbc.dil )  mode.dil sbc-core ; 
+: opc-E7 ( sbc.dil )  mode.dil sbc-core ;  \ New DP opcode
 : opc-E8 ( inx )  X @  1+  mask.xy  X !  check-NZ.x ;
 : opc-E9 ( sbc.# )  mode.imm sbc-core PC+a ; 
 : opc-EA ( nop ) ;
@@ -1260,11 +1315,11 @@ cr .( Defining opcode routines themselves ... )
 : opc-F0 ( beq )  z-flag set? branch-if-true ; 
 : opc-F1 ( sbc.diy )  mode.diy sbc-core ;  
 : opc-F2 ( sbc.di )  mode.di sbc-core ;  
-: opc-F3 ( sbc.siy )  mode.siy sbc-core ; 
+: opc-F3 ( sbc.siy )  mode.siy sbc-core ; \ New S opcode
 : opc-F4 ( phe.# )  next2bytes push16 PC+2 ;
 : opc-F5 ( sbc.dx )  mode.dx sbc-core ; 
 : opc-F6 ( inc.dx )  mode.dx inc.mem ; 
-: opc-F7 ( sbc.dily )  mode.dily sbc-core ; 
+: opc-F7 ( sbc.dily )  mode.dily sbc-core ;  \ New DP opcode
 : opc-F8 ( sed )  d-flag set ; 
 : opc-F9 ( sbc.y )  mode.y sbc-core ; 
 : opc-FA ( plx )  pull.xy  X !  check-NZ.x ; 
@@ -1334,8 +1389,11 @@ cr .( Setting up interrupts ...)
 \ type 'run' or 'step'
 
 \ Increase PC before executing instruction so we are pointing at the
-\ operand (if available). 
-: step ( -- )  opc-jumptable next1byte cells +  @  PC+1 execute ; 
+\ operand (if available). We save the current opcode for tricky things like
+\ emulated DP mode wrapping
+: step ( -- )  
+   next1byte  dup current-opcode !  cells  opc-jumptable +  @ 
+   PC+1 execute ; 
 : run ( -- )  begin step again ; 
 
 \ ---- START EMULATION ----

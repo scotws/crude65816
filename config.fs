@@ -13,6 +13,9 @@
 \ Test of 8-bit Forth system as demo. Putchr must be f001, getchr f004
 \ 00c000 s" tests/taliforth.bin" loadrom     
 
+\ Klaus2m5's 6502 function tests, ALPHA only  TODO remove this 
+\ 00000 s" tests/6502_functional_test.bin" loadrom
+
 \ Dummy file to show how ROM data is loaded. Later, these can be program
 \ libraries or other ROM chips.
 \ 800000 s" data.bin"  loadrom

@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 09. Jan 2015
-\ This version: 14. Oct 2015
+\ This version: 16. Oct 2015
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version ALPHA  14. Oct 2015)  
+cr .( Version ALPHA  16. Oct 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -123,7 +123,7 @@ defer C>  \ TODO see if this should be A|C>
    dup 16>lsb/msb      ( n lsb msb ) 
    rot bank ;          ( lsb msb bank) 
 
-\ Program Counter
+\ Program Counter. Automatically wraps at 16 bit
 : PC+u ( u -- ) ( -- )  
    create ,  does> @  PC @  +  mask16  PC ! ;
 1 PC+u PC+1   2 PC+u PC+2   3 PC+u PC+3
@@ -178,6 +178,7 @@ cr .( Setting up I/O system ...)
 include io.fs
 
 \ Fetch data from memory, depending on the size of the register in question 
+\ TODO See if we need both FETCH and FETCH-OPR, then factor these 
 defer fetch.a  defer fetch.xy
 
 \ Get one byte, a double byte, or three bytes from any 24-bit memory address.
@@ -186,7 +187,8 @@ defer fetch.a  defer fetch.xy
 \ so we can use these routines with stuff like stack manipulations
 
 \ FETCH8 includes the check for special addresses (I/O chips, etc) so all other
-\ store words must be based on it
+\ store words must be based on it. Note that these words do not wrap on the bank
+\ boundry, use FETCH-OPR for that
 : fetch8  ( 65addr24 -- u8 )  
    special-fetch?  dup 0= if     ( 65addr24 0|xt)
       drop  memory +  c@  else   \ C@ means no MASK8 is required
@@ -195,11 +197,22 @@ defer fetch.a  defer fetch.xy
 : fetch24  ( 65addr24 -- u24 )  
    dup fetch8  over 1+ fetch8   rot 2 + fetch8  lsb/msb/bank>24 ; 
 
+\ We need versions of FETCH that will wrap on the bank boundry for the operands,
+\ that is, increase the PC after every byte read
+: fetch-opr8  ( 65addr24 -- u8 )  
+   fetch8 PC+1 ; 
+: fetch-opr16  ( 65addr24 -- u16 )  
+   dup fetch-opr8  swap 1+ fetch-opr8  lsb/msb>16 ; 
+: fetch-opr24  ( 65addr24 -- u24 )  
+   dup fetch-opr8  over 1+ fetch-opr8   rot 2 + fetch-opr8  lsb/msb/bank>24 ; 
+
+
 \ Store registers to memory, depending on size of register 
+\ TODO See if we need both STORE and STORE-OPR, then factor these 
 defer store.a   defer store.xy
 
 \ STORE8 includes the check for special addresses (I/O chips, etc) so all other
-\ store words must be based on it
+\ store words must be based on it. These do not wrap on bank boundries
 : store8 ( u8 65addr24 -- ) 
    special-store?  dup 0= if     ( u8 65addr24 0|xt)
       drop  memory +  c!  else   \ C! means that no MASK is required
@@ -216,11 +229,31 @@ defer store.a   defer store.xy
    store8           ( bank  R: 65addr+2)
    r> store8 ; 
 
+\ STORE-OPR are required for situations where the bank boundry is crossed
+: store-opr8 ( u8 65addr24 --)  store8 PC+1 ; 
+: store-opr16 ( u16 65addr24 -- ) \ store LSB first
+   2dup swap lsb swap store-opr8  swap msb swap 1+ store-opr8 ; 
+: store-opr24 ( u24 65addr24 -- ) 
+\ TODO This is horrible, rewrite 
+   >r               ( u24  R: 65addr ) 
+   24>bank/msb/lsb  ( bank msb lsb  R: 65addr)
+   r> dup 1+ >r     ( bank msb lsb 65addr  R: 65addr+1)
+   store-opr8       ( bank msb  R: 65addr+1) 
+   r> dup 1+ >r     ( bank msb 65addr+1  R: 65addr+2)
+   store-opr8       ( bank  R: 65addr+2)
+   r> store-opr8 ; 
+
 \ Read current bytes in stream, returning them as number. Note we use PBR, not
-\ DBR. These do not advance the PC
+\ DBR. These do not advance the PC and do not wrap on bank boundries
 : next1byte ( -- u8 )  PC24 fetch8 ; 
 : next2bytes ( -- u16 )  PC24 fetch16 ; 
 : next3bytes ( -- u24 )  PC24 fetch24 ; 
+
+\ Read current bytes in stream, returning them as number. Note we use PBR, not
+\ DBR. These advance the PC and wrap on bank boundries
+: next1opr ( -- u8 )  PC24 fetch-opr8 ; 
+: next2opr ( -- u16 )  PC24 fetch-opr16 ; 
+: next3opr ( -- u24 )  PC24 fetch-opr24 ; 
 
 
 \ ---- FLAGS ----

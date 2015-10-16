@@ -153,14 +153,14 @@ defer PC+a  defer PC+xy
 
 
 \ ---- MEMORY ----
-
-\ All accesses to memory are always full 24 bit. Stack follows little-endian
-\ format with bank on top, then msb and lsb ( lsb msb bank -- ) 
 cr .( Creating memory ...) 
 
-\ We just allot the whole possible memory range. Note that this will fail unless
-\ you called Gforth with "-m 1G" or something of that size like you were told in
-\ the MANUAL.txt . You did read the manual, didn't you?
+\ All accesses to memory are always full 24 bit. Stack follows little-endian
+\ format with bank on top, then msb and lsb ( lsb msb bank -- ). However, we use
+\ the "normal" number for all calculations, so we need to convert all fetches.
+\ Also, we just allot the whole possible memory range. Note that this will fail
+\ unless you called Gforth with "-m 1G" or something of that size like you were
+\ told in the MANUAL.txt . You did read the manual, didn't you?
 create memory 16M allot
 
 : loadrom ( 65addr24 addr u -- )
@@ -177,42 +177,56 @@ include config.fs
 cr .( Setting up I/O system ...)
 include io.fs
 
-\ Fetch data from memory, depending on the size of the register in question 
-\ TODO See if we need both FETCH and FETCH-OPR, then factor these 
-defer fetch.a  defer fetch.xy
 
-\ Get one byte, a double byte, or three bytes from any 24-bit memory address.
-\ Double bytes assume  little-endian storage in memory but returns it to the
-\ Forth data stack in "normal" big endian format. We don't advance the PC here
-\ so we can use these routines with stuff like stack manipulations
+\ -- FETCH FROM MEMORY -- 
 
-\ FETCH8 includes the check for special addresses (I/O chips, etc) so all other
-\ store words must be based on it. Note that these words do not wrap on the bank
-\ boundry, use FETCH-OPR for that
+\ Fetching data from memory depends on two things: The size of the register in
+\ question (8/16 bit) and the memory structure based on banks. We adapt to the
+\ size of the register by DEFERing the general routine and switching what it
+\ refers to when the m- and x-flags are switched
+defer fetch.a     defer fetch.xy
+
+\ Simple FETCH are the basic routines that do not affect the PC and ignore
+\ wrapping. Used as the basis for all other fetch versions. FETCH8 includes 
+\ the check for special addresses (I/O chips, etc) so all other
+\ store words must be based on it. Note we have to include this even for 
+\ stack access because somebody might be crazy enough to put the stack over the
+\ I/O addresses in bank 00
 : fetch8  ( 65addr24 -- u8 )  
    special-fetch?  dup 0= if     ( 65addr24 0|xt)
-      drop  memory +  c@  else   \ C@ means no MASK8 is required
+      drop  memory +  c@  else   \ c@ means no MASK8 is required
       nip execute  then ; 
-: fetch16  ( 65addr24 -- u16 )  dup fetch8  swap 1+ fetch8  lsb/msb>16 ; 
+: fetch16  ( 65addr24 -- u16 )  
+   dup fetch8  swap 1+ fetch8  lsb/msb>16 ; 
 : fetch24  ( 65addr24 -- u24 )  
    dup fetch8  over 1+ fetch8   rot 2 + fetch8  lsb/msb/bank>24 ; 
 
-\ We need versions of FETCH that will wrap on the bank boundry for the operands,
-\ that is, increase the PC after every byte read
-: fetch-opr8  ( 65addr24 -- u8 )  
-   fetch8 PC+1 ; 
-: fetch-opr16  ( 65addr24 -- u16 )  
-   dup fetch-opr8  swap 1+ fetch-opr8  lsb/msb>16 ; 
-: fetch-opr24  ( 65addr24 -- u24 )  
-   dup fetch-opr8  over 1+ fetch-opr8   rot 2 + fetch-opr8  lsb/msb/bank>24 ; 
+\ FETCH/WRAP ("fetch with wrap") take an address and walk through byte-for-byte
+\ in case there is a bank boundry that is crossed. These are used for LDA
+\ instructions for example. 
+defer fetch/wrap.a   defer fetch/wrap.xy
+: fetch/wrap8  ( 65addr24 -- u8) fetch8 ;
+: fetch/wrap16 ( 65addr24 -- u16 )  dup fetch8 swap 1+ fetch8 lsb/msb>16 ; 
+: fetch/wrap24 ( 65addr24 -- u24 )  dup fetch16 swap 1+ fetch8 mem16/bank>24 ; 
 
+\ FETCHPC advances the PC while making sure we wrap at the bank boundry. Used
+\ to get the opcodes of the instructions. Bank byte must be provided so we can
+\ use the routine with PBR and DBR  
+defer fetchPC.a   defer fetchPC.xy
+: fetchPC8  ( bank -- u8 )  PC @  swap mem16/bank>24 fetch8 PC+1 ; 
+: fetchPC16  ( bank -- u16 )  dup fetchPC8 swap fetchPC8 lsb/msb>16 ; 
+: fetchPC24  ( 65addr24 -- u24 )  dup fetchPC16 swap fetchPC8 mem16/bank>24 ; 
+
+
+\ -- STORE IN MEMORY -- 
 
 \ Store registers to memory, depending on size of register 
-\ TODO See if we need both STORE and STORE-OPR, then factor these 
-defer store.a   defer store.xy
+defer store.a    defer store.xy
+defer storePC.a  defer storePC.xy
 
 \ STORE8 includes the check for special addresses (I/O chips, etc) so all other
-\ store words must be based on it. These do not wrap on bank boundries
+\ store words must be based on it. These do not wrap on bank boundries and can
+\ be used for the 65816 stack
 : store8 ( u8 65addr24 -- ) 
    special-store?  dup 0= if     ( u8 65addr24 0|xt)
       drop  memory +  c!  else   \ C! means that no MASK is required
@@ -230,30 +244,25 @@ defer store.a   defer store.xy
    r> store8 ; 
 
 \ STORE-OPR are required for situations where the bank boundry is crossed
-: store-opr8 ( u8 65addr24 --)  store8 PC+1 ; 
-: store-opr16 ( u16 65addr24 -- ) \ store LSB first
-   2dup swap lsb swap store-opr8  swap msb swap 1+ store-opr8 ; 
-: store-opr24 ( u24 65addr24 -- ) 
+: storePC8 ( u8 65addr24 --)  store8 PC+1 ; 
+: storePC16 ( u16 65addr24 -- ) \ store LSB first
+   2dup swap lsb swap storePC8  swap msb swap 1+ storePC8 ; 
+: storePC24 ( u24 65addr24 -- ) 
 \ TODO This is horrible, rewrite 
    >r               ( u24  R: 65addr ) 
    24>bank/msb/lsb  ( bank msb lsb  R: 65addr)
    r> dup 1+ >r     ( bank msb lsb 65addr  R: 65addr+1)
-   store-opr8       ( bank msb  R: 65addr+1) 
+   storePC8       ( bank msb  R: 65addr+1) 
    r> dup 1+ >r     ( bank msb 65addr+1  R: 65addr+2)
-   store-opr8       ( bank  R: 65addr+2)
-   r> store-opr8 ; 
+   storePC8       ( bank  R: 65addr+2)
+   r> storePC8 ; 
 
 \ Read current bytes in stream, returning them as number. Note we use PBR, not
 \ DBR. These do not advance the PC and do not wrap on bank boundries
+\ TODO see if these shouldn't be deleted
 : next1byte ( -- u8 )  PC24 fetch8 ; 
 : next2bytes ( -- u16 )  PC24 fetch16 ; 
 : next3bytes ( -- u24 )  PC24 fetch24 ; 
-
-\ Read current bytes in stream, returning them as number. Note we use PBR, not
-\ DBR. These advance the PC and wrap on bank boundries
-: next1opr ( -- u8 )  PC24 fetch-opr8 ; 
-: next2opr ( -- u16 )  PC24 fetch-opr16 ; 
-: next3opr ( -- u24 )  PC24 fetch-opr24 ; 
 
 
 \ ---- FLAGS ----
@@ -527,7 +536,7 @@ defer cop.a
    P> push8
    i-flag set
    d-flag clear
-   cop-v fetch16 PC ! ; 
+   cop-v fetch/wrap16 PC ! ; 
 
 : cop.n ( -- )  PBR @  push8  0 PBR !  cop.e ; 
 
@@ -542,6 +551,8 @@ variable xy16flag   xy16flag clear
 \ Switch accumulator 8<->16 bit (p. 51 in Manual)
 : a:16  ( -- )  
    ['] fetch16 is fetch.a
+   ['] fetch/wrap16 is fetch/wrap.a
+   ['] fetchPC16 is fetchPC.a
    ['] store16 is store.a
    ['] 16>C! is >C 
    ['] C>16 is C>
@@ -562,6 +573,8 @@ variable xy16flag   xy16flag clear
 
 : a:8 ( -- )  
    ['] fetch8 is fetch.a
+   ['] fetch/wrap8 is fetch/wrap.a
+   ['] fetchPC8 is fetchPC.a
    ['] store8 is store.a
    ['] 8>C! is >C 
    ['] C>8 is C>
@@ -583,6 +596,8 @@ variable xy16flag   xy16flag clear
 \ Switch X and Y 8<->16 bit (p. 51 in Manual) 
 : xy:16  ( -- )  
    ['] fetch16 is fetch.xy 
+   ['] fetch/wrap16 is fetch/wrap.xy 
+   ['] fetchPC16 is fetchPC.xy 
    ['] store16 is store.xy
    ['] mask16 is mask.xy
    ['] PC+2 is PC+xy
@@ -598,6 +613,8 @@ variable xy16flag   xy16flag clear
 
 : xy:8 ( -- )  
    ['] fetch8 is fetch.xy
+   ['] fetch/wrap8 is fetch/wrap.xy 
+   ['] fetchPC8 is fetchPC.xy 
    ['] store8 is store.xy
    ['] mask8 is mask.xy
    ['] PC+1 is PC+xy
@@ -709,17 +726,20 @@ cr .( Defining addressing modes ...)
 \ Examples for the modes are given for the traditional syntax and for Typist's
 \ Assembler
 
+\ HIER HIER TEST THESE TODO 
+\
 \ Absolute: "LDA $1000" / "lda 1000" #
 \ We need two different versions, one for instructions that affect data and take
 \ the DBR, and one for instructions that affect programs and take the PBR
-: mode.abs.DBR ( -- 65addr24 )  next2bytes mem16/DBR>24 PC+2 ;
-: mode.abs.PBR ( -- 65addr24 )  next2bytes mem16/PBR>24 PC+2 ;
+: mode.abs.DBR ( -- 65addr24 )  fetchPC16 mem16/DBR>24 ;
+: mode.abs.PBR ( -- 65addr24 )  fetchPC16 mem16/PBR>24 ; 
+
 
 \ Absolute Indirect: "JMP ($1000)" / "jmp.i 1000"
-: mode.i  ( -- 65addr24)  next2bytes 00 mem16/bank>24 fetch16 mem16/PBR>24 PC+2 ;
+: mode.i  ( -- 65addr24)  next2bytes 00 mem16/bank>24 fetchPC16 mem16/PBR>24 ;
 
 \ Absolute Indirect LONG: "JMP [$1000]" / "jmp.il 1000"
-: mode.il  ( -- 65addr24)  next2bytes 00 mem16/bank>24 fetch24 PC+2 ; 
+: mode.il  ( -- 65addr24)  next2bytes 00 mem16/bank>24 fetch/wrap24 PC+2 ; 
 
 \ Absolute Indexed X/Y (pp. 289-290): "LDA $1000,X" / "lda.x 1000"
 \ Assumes that X will be the correct width (8 or 16 bit)

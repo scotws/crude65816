@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 09. Jan 2015
-\ This version: 17. Oct 2015
+\ This version: 18. Oct 2015
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version ALPHA  17. Oct 2015)  
+cr .( Version ALPHA  18. Oct 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -125,7 +125,7 @@ defer C>  \ TODO see if this should be A|C>
    rot bank ;          ( lsb msb bank) 
 
 \ Program Counter. Automatically wraps at 16 bit
-\ TODO see if we need anything else than PC+1
+\ TODO see if we need PC+3
 : PC+u ( u -- ) ( -- )  
    create ,  does> @  PC @  +  mask16  PC ! ;
 1 PC+u PC+1   2 PC+u PC+2   3 PC+u PC+3
@@ -197,8 +197,6 @@ include io.fs
 \ based on it. Note we have to include this even for stack accesses because
 \ somebody might be crazy enough to put the stack over the I/O addresses in bank
 \ 00
-\ defer fetch.a     TODO see if even needed
-\ defer fetch.xy    TODO see if even needed
 : fetch8  ( 65addr24 -- u8 )  
    special-fetch?  dup 0= if     ( 65addr24 0|xt)
       drop  memory +  c@  else   \ c@ means no MASK8 is required
@@ -243,7 +241,7 @@ defer store.a    defer store.xy
    2dup swap lsb swap store8  swap msb swap 1+ store8 ; 
 : store24 ( u24 65addr24 -- )
 \ TODO This is really, really horrible, rewrite 
-\ TODO this is only used for testing, see if we even need it
+\ TODO Even better, see if we even need this at all
    >r               ( u24  R: 65addr ) 
    24>bank/msb/lsb  ( bank msb lsb  R: 65addr)
    r> dup 1+ >r     ( bank msb lsb 65addr  R: 65addr+1)
@@ -502,13 +500,15 @@ defer S--.a  defer S--.xy
 : S--8 ( -- )  S @  1-  mask8  0100 OR  S ! ; 
 : S--16 ( -- )  S @  1-  mask16  S ! ; 
 
-\ Push stuff to stack
+\ Push stuff to stack. Use the naked STORE8 routine here because we don't want
+\ to touch the PC and S--8 handles the wrapping stuff
 defer push.a  defer push.xy
 : push8 ( n8 -- )  S @  store8  S--8 ; 
 : push16 ( n16 -- )  16>lsb/msb push8 push8 ; 
 : push24 ( n24 -- )  24>bank/msb/lsb  rot push8  swap push8  push8 ; 
 
-\ Pull stuff from stack 
+\ Pull stuff from stack. Use the naked FETCH8 routine here because we don't
+\ want to touch the PC and S++8 handles the wrapping stuff
 defer pull.a  defer pull.xy
 : pull8 ( -- n8 )  S++8  S @  fetch8 ; 
 : pull16 ( -- n16 )  pull8 pull8 lsb/msb>16 ; 
@@ -519,12 +519,14 @@ defer pull.a  defer pull.xy
 cr .( Setting up interrupt stuff ...)
 
 \ We do not use the BRK command to drop out of a running loop during emulation,
-\ this is the job of STP. 
+\ this is the job of WAI and STP. 
 \ TODO see if we need to clear the PBR in emulated mode as well 
 defer brk.a 
 : brk-core ( -- ) 
    ." *** BRK encountered at " PC24 .mask24 ." ***" 
-   d-flag clear   PC+1  PC @  push16  P> push8  i-flag set  brk-v PC ! ; 
+   d-flag clear   PC+1  PC @  push16  P> push8  i-flag set  
+   brk-v fetch/wrap16  PC ! ; 
+
 : brk.n ( -- )  PBR @  push8  0 PBR !   brk-core  ; 
 : brk.e ( -- )  b-flag set   brk-core ;
 
@@ -550,7 +552,6 @@ variable xy16flag   xy16flag clear
 
 \ Switch accumulator 8<->16 bit (p. 51 in Manual)
 : a:16  ( -- )  
-\  ['] fetch16 is fetch.a  TODO see if needed
    ['] fetch/wrap16 is fetch/wrap.a
    ['] fetchPC16 is fetchPC.a
    ['] store16 is store.a
@@ -573,7 +574,6 @@ variable xy16flag   xy16flag clear
    a16flag set ; 
 
 : a:8 ( -- )  
-\  ['] fetch8 is fetch.a  TODO see if needed
    ['] fetch/wrap8 is fetch/wrap.a
    ['] fetchPC8 is fetchPC.a
    ['] store8 is store.a
@@ -597,7 +597,6 @@ variable xy16flag   xy16flag clear
 
 \ Switch X and Y 8<->16 bit (p. 51 in Manual) 
 : xy:16  ( -- )  
-\  ['] fetch16 is fetch.xy   TODO see if needed
    ['] fetch/wrap16 is fetch/wrap.xy 
    ['] fetchPC16 is fetchPC.xy 
    ['] store16 is store.xy
@@ -615,7 +614,6 @@ variable xy16flag   xy16flag clear
    xy16flag set ; 
 
 : xy:8 ( -- )  
-\  ['] fetch8 is fetch.xy  TODO see if needed
    ['] fetch/wrap8 is fetch/wrap.xy 
    ['] fetchPC8 is fetchPC.xy 
    ['] store8 is store.xy

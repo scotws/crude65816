@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 09. Jan 2015
-\ This version: 16. Oct 2015
+\ This version: 17. Oct 2015
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version ALPHA  16. Oct 2015)  
+cr .( Version ALPHA  17. Oct 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -74,6 +74,7 @@ defer mask.a  defer mask.xy
    2 base !  s>d <# # # # # # # # # #> type  hex ; 
 
 \ Format numbers to two, four, and six places, assumes HEX
+\ TODO find diffent name for these words
 : .mask8 ( n -- )  s>d <# # # #> type space ; 
 : .mask16 ( n -- )  s>d <# # # # # #> type space ; 
 : .mask24 ( n -- )  s>d <# # # # # # # #> type space ; 
@@ -184,14 +185,19 @@ include io.fs
 \ question (8/16 bit) and the memory structure based on banks. We adapt to the
 \ size of the register by DEFERing the general routine and switching what it
 \ refers to when the m- and x-flags are switched
-defer fetch.a     defer fetch.xy
+
+\ Increase a full 24 bit address by n, but wrap so that the bank byte is not
+\ affected; that is, increase the "PC" part by one and wrap to bank 
+: addr+/wrap ( n 65addr24 -- 65addr24+1 ) 
+   >r dup mask16 r> + mask16 swap bank mem16/bank>24 ; 
 
 \ Simple FETCH are the basic routines that do not affect the PC and ignore
-\ wrapping. Used as the basis for all other fetch versions. FETCH8 includes 
-\ the check for special addresses (I/O chips, etc) so all other
-\ store words must be based on it. Note we have to include this even for 
-\ stack access because somebody might be crazy enough to put the stack over the
-\ I/O addresses in bank 00
+\ wrapping. Used as the basis for all other fetch versions. FETCH8 includes the
+\ check for special addresses (I/O chips, etc) so all other store words must be
+\ based on it. Note we have to include this even for stack accesses because
+\ somebody might be crazy enough to put the stack over the I/O addresses in bank
+\ 00
+defer fetch.a     defer fetch.xy
 : fetch8  ( 65addr24 -- u8 )  
    special-fetch?  dup 0= if     ( 65addr24 0|xt)
       drop  memory +  c@  else   \ c@ means no MASK8 is required
@@ -201,22 +207,25 @@ defer fetch.a     defer fetch.xy
 : fetch24  ( 65addr24 -- u24 )  
    dup fetch8  over 1+ fetch8   rot 2 + fetch8  lsb/msb/bank>24 ; 
 
-\ FETCH/WRAP ("fetch with wrap") take an address and walk through byte-for-byte
-\ in case there is a bank boundry that is crossed. These are used for LDA
-\ instructions for example. 
+\ FETCH/WRAP ("fetch with wrap") take an address and walks through it
+\ byte-for-byte in case there is a bank boundry that is crossed. These are used
+\ for LDA instructions, for example. These do not touch the PC, use FETCHPC for
+\ that
 defer fetch/wrap.a   defer fetch/wrap.xy
 : fetch/wrap8  ( 65addr24 -- u8) fetch8 ;
-: fetch/wrap16 ( 65addr24 -- u16 )  dup fetch8 swap 1+ fetch8 lsb/msb>16 ; 
-: fetch/wrap24 ( 65addr24 -- u24 )  dup fetch16 swap 1+ fetch8 mem16/bank>24 ; 
+: fetch/wrap16 ( 65addr24 -- u16 )  
+   dup fetch8 swap  1 addr+/wrap  fetch8 lsb/msb>16 ; 
+: fetch/wrap24 ( 65addr24 -- u24 )  
+   dup fetch16 swap  2 addr+/wrap  fetch8 mem16/bank>24 ; 
 
 \ FETCHPC advances the PC while making sure we wrap at the bank boundry. Used
-\ to get the opcodes of the instructions. Bank byte must be provided so we can
-\ use the routine with PBR and DBR  
+\ to get the opcodes of the instructions.
 defer fetchPC.a   defer fetchPC.xy
-: fetchPC8  ( bank -- u8 )  PC @  swap mem16/bank>24 fetch8 PC+1 ; 
-: fetchPC16  ( bank -- u16 )  dup fetchPC8 swap fetchPC8 lsb/msb>16 ; 
-: fetchPC24  ( 65addr24 -- u24 )  dup fetchPC16 swap fetchPC8 mem16/bank>24 ; 
+: fetchPC8  ( -- u8 )  PC @  PBR @  mem16/bank>24 fetch8 PC+1 ; 
+: fetchPC16  ( -- u16 ) fetchPC8 fetchPC8 lsb/msb>16 ; 
+: fetchPC24  ( -- u24 ) fetchPC16 fetchPC8 mem16/bank>24 ; 
 
+\ HIER HIER 
 
 \ -- STORE IN MEMORY -- 
 
@@ -727,13 +736,12 @@ cr .( Defining addressing modes ...)
 \ Assembler
 
 \ HIER HIER TEST THESE TODO 
-\
+
 \ Absolute: "LDA $1000" / "lda 1000" #
 \ We need two different versions, one for instructions that affect data and take
 \ the DBR, and one for instructions that affect programs and take the PBR
 : mode.abs.DBR ( -- 65addr24 )  fetchPC16 mem16/DBR>24 ;
 : mode.abs.PBR ( -- 65addr24 )  fetchPC16 mem16/PBR>24 ; 
-
 
 \ Absolute Indirect: "JMP ($1000)" / "jmp.i 1000"
 : mode.i  ( -- 65addr24)  next2bytes 00 mem16/bank>24 fetchPC16 mem16/PBR>24 ;
@@ -897,6 +905,21 @@ cr .( Creating output functions ...)
    P> .8bits  space 
    e-flag set? if ." emulated" else ." native" then cr ; 
 
+
+\ Dump memory with 65816 addresses. Note you can also use the DUMP built-in
+\ word from Forth with "<65ADDR> memory + <BYTES> DUMP"
+: 65dump ( 65addr24 u -- ) 
+   cr 8 spaces ."  0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F" 
+   over + swap
+
+   dup 10 mod  0<> if  
+      dup 0fffff0 and cr .mask24 space
+      dup 0f and  3 * spaces  then
+   ?do 
+      i  10 mod 0= if  cr i mask24  .mask24 space then 
+      i fetch8 .mask8 
+   loop cr ; 
+
 \ Print stack if we are in emulated mode
 : stackempty? ( -- f )  S @  01ff  = ; 
 : .stack ( -- )
@@ -911,6 +934,7 @@ cr .( Creating output functions ...)
 \ Print Direct Page contents. We use D as a base regardless of which mode we are
 \ in; see MODE.D for discussion of what happens with D in emulation mode.
 \ Assumes HEX.
+\ TODO make this a special case of 65dump 
 : .direct ( -- ) 
    cr ."        0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F"
    100 0 ?do  cr  D @  i +  .mask16 ."  " 
@@ -1038,9 +1062,9 @@ cr .( Defining core routines for opcodes )
 : cmp-core ( u 65addr -- )  fetch.a cmp.a ; 
 : cpxy-core ( u 65addr -- )  fetch.xy cmp.xy ; 
 
-: lda-core ( 65addr -- )  fetch.a  >C  check-NZ.a ;
-: ldx-core ( 65addr -- )  fetch.xy  X !  check-NZ.x ;
-: ldy-core ( 65addr -- )  fetch.xy  Y !  check-NZ.y ;
+: lda-core ( 65addr -- )  fetch/wrap.a  >C  check-NZ.a ;
+: ldx-core ( 65addr -- )  fetch/wrap.xy  X !  check-NZ.x ;
+: ldy-core ( 65addr -- )  fetch/wrap.xy  Y !  check-NZ.y ;
 
 
 \ -- Addition routines -- 

@@ -1,6 +1,6 @@
 \ Configuration file for A Crude 65816 Emulator
 \ Scot W. Stevenson <scot.stevenson@gmail.com>
-\ This version: 09. Oct 2015
+\ This version: 17. Oct 2015
 
 \ This file must be loaded before io.fs
 
@@ -13,14 +13,14 @@
 \ Test of 8-bit Forth system as demo. Putchr must be f001, getchr f004
 \ 00c000 s" tests/taliforth.bin" loadrom     
 
-\ Klaus2m5's 6502 function tests, ALPHA only  TODO remove this 
-\ 00000 s" tests/6502_functional_test.bin" loadrom
-
 \ Dummy file to show how ROM data is loaded. Later, these can be program
 \ libraries or other ROM chips.
 \ 800000 s" data.bin"  loadrom
 
-\ Test program from assembler, for ALPHA only 
+\ Klaus2m5's 6502 function tests, ALPHA only  TODO remove this 
+\ 00000 s" tests/6502_functional_test.bin" loadrom
+\
+\ Test program from assembler, for ALPHA only TODO remove this 
 00e000 s" ../tasm65816/rom.bin" loadrom   
 
 

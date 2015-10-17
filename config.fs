@@ -11,7 +11,7 @@
 \  00e000 s" rom65816.bin" loadrom  \ operating system, BIOS, *DEFAULT*
 
 \ Test of 8-bit Forth system as demo. Putchr must be f001, getchr f004
-\ 00c000 s" tests/taliforth.bin" loadrom     
+00c000 s" tests/taliforth.bin" loadrom     
 
 \ Dummy file to show how ROM data is loaded. Later, these can be program
 \ libraries or other ROM chips.
@@ -21,16 +21,17 @@
 \ 00000 s" tests/6502_functional_test.bin" loadrom
 \
 \ Test program from assembler, for ALPHA only TODO remove this 
-00e000 s" ../tasm65816/rom.bin" loadrom   
+\ 00e000 s" ../tasm65816/rom.bin" loadrom   
 
 
 \  --- DEFINITIONS --- 
 
 \ I/O addresses. These are referenced by io.fs
 
-\  00ff00 value putchr
-\  00ff01 value getchr   \ blocks until character received
+\ 00ff00 value putchr
+\ 00ff01 value getchr   \ blocks until character received
 
+\ Use these for Tali Forth for the 6502
   00f001 value putchr
   00f004 value getchr   \ blocks until character received
 

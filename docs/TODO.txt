@@ -1,11 +1,10 @@
 TODO for A Crude 65816 Emulator
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 27. May 2015
-This version: 13. Oct 2015
+This version: 17. Oct 2015
 
 
 IMMEDIATELY 
-- Add interrupt code. Declare ALPHA when finished. 
 
 
 SHORT TERM

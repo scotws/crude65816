@@ -1,7 +1,7 @@
 Manual for A Crude 65816 Emulator 
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 09. Jan 2015
-This version: 13. Oct 2015
+This version: 17. Oct 2015
 
 
 THIS DOCUMENT IS CURRENTLY MERELY A COLLECTION OF NOTES. WHEN IN DOUBT, USE THE SOURCE CODE. 
@@ -10,21 +10,21 @@ THIS DOCUMENT IS CURRENTLY MERELY A COLLECTION OF NOTES. WHEN IN DOUBT, USE THE 
 
 CALLING THE PROGRAM
 
-By default, Gforth only reserves measly 256k for the dictionary, which is not enough when you are going to simulate a 16M large memory space. We need to call Gforth with something like
+By default, Gforth only reserves measly 256k for the dictionary, which is not enough when you are going to simulate a 16M large memory space. We need to call Gforth with 
 
-        gforth -m 1G
+        gforth -m 64M 
 
-which should be way more than enough. You can also start the emulator directly  from the command line with
+You can also start the emulator directly from the command line with
 
-        gforth -m 1G crude65816.fs
+        gforth -m 64M crude65816.fs
 
-Linux users will want to put this in a shell script. 
+You might want to put this in a shell script. 
 
 
 
 IMPORTING ROM FILES
 
-The Crude Emulator has a very, ahem, crude memory model: It simply reserves 16 MByte of RAM as the complete memory range of the 65816. During boot, the emulator loads the contents of the files given in config.fs to the memory locations in the lines designated with loadrom. Note there is no write protection for ROM, the emulator will happily let you change these values. 
+The Crude Emulator has a very, well, crude memory model: It simply reserves 16 MByte of RAM as the complete memory range of the 65816. During boot, the emulator loads the contents of the files given in config.fs to the memory locations in the lines designated with LOADROM. This lets you simulate ROM data. Note, however, there is no write protection for ROM; the emulator will happily let you change these values. 
 
 The current ROM file is a primitive 8-bit test program from the 6502 project. 
 
@@ -38,13 +38,14 @@ Currently I/O chips are not emulated in any meaningful way. There are two locati
 
 USING THE PROGRAM
 
-In case you are new to Forth, a remember: it is not a programming language, but a system to create specialized languages. As such, with the Crude Emulator you have access to all Forth commands such as "dump", and in single-step mode can assign values to the register variables. 
+In case you are new to Forth, a remember: it is not a programming language, but a system to create specialized languages. As such, with the Crude Emulator you have access to all Forth commands such as DUMP, and in single-step mode can assign values to, say, the 65816 registers. 
 
-The Crude Emulator current supports the following addition commands. Note that by Forth convention, a command that starts with a dot (".state") prints some information to the screen. 
+The Crude Emulator current supports the following addition commands. Note that by Forth convention, a command that starts with a dot (".STATE") prints some information to the screen. 
 
         .direct         - print the Direct Page based on D register
         .stack          - print the 65816 stack if in emulated mode
         .state          - print the CPU state (register content, etc)
+        65dump          - dump memory range based on 65816 addresses
         abort-i         - trigger the ABORT interrupt 
         bye             - end emulation (normal Forth command) 
         fetch8          - fetch a byte from 24-bit address on Forth stack
@@ -58,11 +59,7 @@ The Crude Emulator current supports the following addition commands. Note that b
         run             - run the emulator continuously
         step            - run one instruction in single-step mode
 
-STEP is usually used in combination with .STATE ("step .state") to show the status of the emulator after every step. Because of the nature of Forth, any word defined in the emulator can be used from the command line. For example, to get a dump of a memory range, we can use a command such as 
-
-        00e000 memory +  4 dump 
-
-Which will show the first four bytes of the 65816's memory starting at bank 0, address e000. To force the machine to run at a certain address, just save it in the PC: 
+STEP is usually used in combination with .STATE ("step .state") to show the status of the emulator after every step. Because of the nature of Forth, any word defined in the emulator can be used from the command line. To force the machine to run at a certain address, just save it in the PC: 
 
         00e000 PC ! 
 
@@ -70,7 +67,7 @@ followed by a "run" or "step". The interrupt vectors can be accessed by hand thi
 
         reset-i
 
-Note that currently most interrupt routines are not functional. 
+To use RUN and STEP during testing, use the WAI instruction in the 65816 code to pause execution, and STP to stop the system. 
 
 
 OTHER USEFUL COMBINATIONS
@@ -89,6 +86,8 @@ step .state .stack
 To monitor a memory address every step, we can use the FETCH instructions. To watch what happens to $000000, for instance: 
 
 step .state  ." DP 00:"  0000 fetch16 . 
+
+Note FETCH does not wrap at the bank boundry, use FETCH/WRAP for this. 
 
 
 HALTING THE EMULATION 

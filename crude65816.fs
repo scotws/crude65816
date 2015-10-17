@@ -74,7 +74,7 @@ defer mask.a  defer mask.xy
    2 base !  s>d <# # # # # # # # # #> type  hex ; 
 
 \ Format numbers to two, four, and six places, assumes HEX
-\ TODO find diffent name for these words
+\ TODO find diffent names for these words
 : .mask8 ( n -- )  s>d <# # # #> type space ; 
 : .mask16 ( n -- )  s>d <# # # # # #> type space ; 
 : .mask24 ( n -- )  s>d <# # # # # # # #> type space ; 
@@ -125,6 +125,7 @@ defer C>  \ TODO see if this should be A|C>
    rot bank ;          ( lsb msb bank) 
 
 \ Program Counter. Automatically wraps at 16 bit
+\ TODO see if we need anything else than PC+1
 : PC+u ( u -- ) ( -- )  
    create ,  does> @  PC @  +  mask16  PC ! ;
 1 PC+u PC+1   2 PC+u PC+2   3 PC+u PC+3
@@ -142,7 +143,6 @@ defer C>  \ TODO see if this should be A|C>
 \ Create a full 24 bit address that is in bank zero. In other words, wrap to
 \ bank zero 
 : mem16/bank00>24   ( 65addr16 -- 65addr24 )   00 mem16/bank>24 ; 
-
 : lsb/msb/bank>24  ( lsb msb bank -- 65addr24 )  
    -rot lsb/msb>16 swap mem16/bank>24 ; 
 
@@ -151,6 +151,11 @@ defer PC+a  defer PC+xy
 
 \ Get full 24 bit current address (PC plus PBR) 
 : PC24 ( -- 65addr24)  PC @  PBR @  mem16/bank>24 ; 
+
+\ Increase a full 24 bit address by n, but wrap so that the bank byte is not
+\ affected; that is, increase the "PC" part by one and wrap to bank 
+: 65addr+/wrap ( n 65addr24 -- 65addr24+1 ) 
+   >r dup mask16 r> + mask16 swap bank mem16/bank>24 ; 
 
 
 \ ---- MEMORY ----
@@ -186,18 +191,14 @@ include io.fs
 \ size of the register by DEFERing the general routine and switching what it
 \ refers to when the m- and x-flags are switched
 
-\ Increase a full 24 bit address by n, but wrap so that the bank byte is not
-\ affected; that is, increase the "PC" part by one and wrap to bank 
-: addr+/wrap ( n 65addr24 -- 65addr24+1 ) 
-   >r dup mask16 r> + mask16 swap bank mem16/bank>24 ; 
-
 \ Simple FETCH are the basic routines that do not affect the PC and ignore
 \ wrapping. Used as the basis for all other fetch versions. FETCH8 includes the
 \ check for special addresses (I/O chips, etc) so all other store words must be
 \ based on it. Note we have to include this even for stack accesses because
 \ somebody might be crazy enough to put the stack over the I/O addresses in bank
 \ 00
-defer fetch.a     defer fetch.xy
+\ defer fetch.a     TODO see if even needed
+\ defer fetch.xy    TODO see if even needed
 : fetch8  ( 65addr24 -- u8 )  
    special-fetch?  dup 0= if     ( 65addr24 0|xt)
       drop  memory +  c@  else   \ c@ means no MASK8 is required
@@ -214,9 +215,9 @@ defer fetch.a     defer fetch.xy
 defer fetch/wrap.a   defer fetch/wrap.xy
 : fetch/wrap8  ( 65addr24 -- u8) fetch8 ;
 : fetch/wrap16 ( 65addr24 -- u16 )  
-   dup fetch8 swap  1 addr+/wrap  fetch8 lsb/msb>16 ; 
+   dup fetch8 swap  1 65addr+/wrap  fetch8 lsb/msb>16 ; 
 : fetch/wrap24 ( 65addr24 -- u24 )  
-   dup fetch16 swap  2 addr+/wrap  fetch8 mem16/bank>24 ; 
+   dup fetch16 swap  2 65addr+/wrap  fetch8 mem16/bank>24 ; 
 
 \ FETCHPC advances the PC while making sure we wrap at the bank boundry. Used
 \ to get the opcodes of the instructions.
@@ -225,25 +226,24 @@ defer fetchPC.a   defer fetchPC.xy
 : fetchPC16  ( -- u16 ) fetchPC8 fetchPC8 lsb/msb>16 ; 
 : fetchPC24  ( -- u24 ) fetchPC16 fetchPC8 mem16/bank>24 ; 
 
-\ HIER HIER 
 
 \ -- STORE IN MEMORY -- 
 
-\ Store registers to memory, depending on size of register 
-defer store.a    defer store.xy
-defer storePC.a  defer storePC.xy
+\ (See remarks on fetching data from memory) 
 
-\ STORE8 includes the check for special addresses (I/O chips, etc) so all other
-\ store words must be based on it. These do not wrap on bank boundries and can
-\ be used for the 65816 stack
+\ Simply store routines that do not affect the PC and ignore wrapping. STORE8
+\ includes the check for special addresses (I/O chips, etc) so all other store
+\ words must be based on it. 
+defer store.a    defer store.xy
 : store8 ( u8 65addr24 -- ) 
    special-store?  dup 0= if     ( u8 65addr24 0|xt)
       drop  memory +  c!  else   \ C! means that no MASK is required
       nip execute  then ; 
 : store16 ( u16 65addr24 -- ) \ store LSB first
    2dup swap lsb swap store8  swap msb swap 1+ store8 ; 
-: store24 ( u24 65addr24 -- ) 
-\ TODO This is horrible, rewrite 
+: store24 ( u24 65addr24 -- )
+\ TODO This is really, really horrible, rewrite 
+\ TODO this is only used for testing, see if we even need it
    >r               ( u24  R: 65addr ) 
    24>bank/msb/lsb  ( bank msb lsb  R: 65addr)
    r> dup 1+ >r     ( bank msb lsb 65addr  R: 65addr+1)
@@ -252,26 +252,15 @@ defer storePC.a  defer storePC.xy
    store8           ( bank  R: 65addr+2)
    r> store8 ; 
 
-\ STORE-OPR are required for situations where the bank boundry is crossed
-: storePC8 ( u8 65addr24 --)  store8 PC+1 ; 
-: storePC16 ( u16 65addr24 -- ) \ store LSB first
-   2dup swap lsb swap storePC8  swap msb swap 1+ storePC8 ; 
-: storePC24 ( u24 65addr24 -- ) 
-\ TODO This is horrible, rewrite 
-   >r               ( u24  R: 65addr ) 
-   24>bank/msb/lsb  ( bank msb lsb  R: 65addr)
-   r> dup 1+ >r     ( bank msb lsb 65addr  R: 65addr+1)
-   storePC8       ( bank msb  R: 65addr+1) 
-   r> dup 1+ >r     ( bank msb 65addr+1  R: 65addr+2)
-   storePC8       ( bank  R: 65addr+2)
-   r> storePC8 ; 
-
-\ Read current bytes in stream, returning them as number. Note we use PBR, not
-\ DBR. These do not advance the PC and do not wrap on bank boundries
-\ TODO see if these shouldn't be deleted
-: next1byte ( -- u8 )  PC24 fetch8 ; 
-: next2bytes ( -- u16 )  PC24 fetch16 ; 
-: next3bytes ( -- u24 )  PC24 fetch24 ; 
+\ STORE/WRAP ("store with wrap") stores a byte or a double byte on
+\ a byte-for-byte basis for cases when a bank-boundry can be crossed. These are
+\ used for STA instructions (duh). These do not touch the PC. There is no need
+\ for a STORE/WRAP24
+defer store/wrap.a   defer store/wrap.xy
+: store/wrap8  ( u8 65addr24 -- ) store8 ; 
+: store/wrap16  ( u16 65addr24 -- ) 
+   2dup swap lsb swap store8           \ LSB
+   swap msb swap 1 65addr+/wrap store8 ; \ MSBS 
 
 
 \ ---- FLAGS ----
@@ -494,19 +483,21 @@ defer cmp.a  defer cmp.xy
 \ --- BRANCHING --- 
 cr .( Setting up branching ...) 
 
-: takebranch ( -- )  next1byte signextend 1+  PC @ +  PC ! ;
+: takebranch ( -- )  PC24 fetch8  signextend 1+  PC @ +  PC ! ;
 : branch-if-true ( f -- )  if takebranch else PC+1 then ; 
 
 
 \ --- STACK STUFF ----
 cr .( Setting up stack ...)
 
-\ increase stack pointer 
+\ increase stack pointer. Because of the MASK16, this automatically wraps to
+\ bank 0 
 defer S++.a  defer S++.xy
 : S++8 ( -- )  S @  1+  mask8  0100 OR  S ! ; 
 : S++16 ( -- )  S @  1+  mask16  S ! ; 
 
-\ decrease stack pointer, hardcoding 01 as MSB of pointer
+\ decrease stack pointer, hardcoding 01 as MSB of pointer. Because of the
+\ MASK16, this automatically wraps to bank 0
 defer S--.a  defer S--.xy
 : S--8 ( -- )  S @  1-  mask8  0100 OR  S ! ; 
 : S--16 ( -- )  S @  1-  mask16  S ! ; 
@@ -559,10 +550,11 @@ variable xy16flag   xy16flag clear
 
 \ Switch accumulator 8<->16 bit (p. 51 in Manual)
 : a:16  ( -- )  
-   ['] fetch16 is fetch.a
+\  ['] fetch16 is fetch.a  TODO see if needed
    ['] fetch/wrap16 is fetch/wrap.a
    ['] fetchPC16 is fetchPC.a
    ['] store16 is store.a
+   ['] store/wrap16 is store/wrap.a
    ['] 16>C! is >C 
    ['] C>16 is C>
    ['] PC+2 is PC+a
@@ -581,10 +573,11 @@ variable xy16flag   xy16flag clear
    a16flag set ; 
 
 : a:8 ( -- )  
-   ['] fetch8 is fetch.a
+\  ['] fetch8 is fetch.a  TODO see if needed
    ['] fetch/wrap8 is fetch/wrap.a
    ['] fetchPC8 is fetchPC.a
    ['] store8 is store.a
+   ['] store/wrap8 is store/wrap.a
    ['] 8>C! is >C 
    ['] C>8 is C>
    ['] PC+1 is PC+a
@@ -604,10 +597,11 @@ variable xy16flag   xy16flag clear
 
 \ Switch X and Y 8<->16 bit (p. 51 in Manual) 
 : xy:16  ( -- )  
-   ['] fetch16 is fetch.xy 
+\  ['] fetch16 is fetch.xy   TODO see if needed
    ['] fetch/wrap16 is fetch/wrap.xy 
    ['] fetchPC16 is fetchPC.xy 
    ['] store16 is store.xy
+   ['] store/wrap16 is store/wrap.xy
    ['] mask16 is mask.xy
    ['] PC+2 is PC+xy
    ['] check-N.x16 is check-N.x
@@ -621,10 +615,11 @@ variable xy16flag   xy16flag clear
    xy16flag set ; 
 
 : xy:8 ( -- )  
-   ['] fetch8 is fetch.xy
+\  ['] fetch8 is fetch.xy  TODO see if needed
    ['] fetch/wrap8 is fetch/wrap.xy 
    ['] fetchPC8 is fetchPC.xy 
    ['] store8 is store.xy
+   ['] store/wrap8 is store/wrap.xy
    ['] mask8 is mask.xy
    ['] PC+1 is PC+xy
    ['] check-N.x8 is check-N.x
@@ -677,12 +672,12 @@ defer rti.a
 \ This needs to come after the status byte routines but before the switch of the
 \ processor modes
 defer sep.a
-: sep.n  ( n8 -- ) P> next1byte or >P PC+1 ;
-: sep.e  ( n8 -- ) next1byte 0cf and P> or >P PC+1 ; \ Mask with 11001111 
+: sep.n  ( n8 -- ) P> fetchPC8 or >P ;
+: sep.e  ( n8 -- ) fetchPC8 0cf and P> or >P ; \ Mask with 11001111 
 
 defer rep.a
-: rep.n  ( n8 -- ) next1byte invert P> and >P PC+1 ;
-: rep.e  ( n8 -- ) next1byte 0cf and invert P> and >P PC+1 ; \ Mask with 11001111 
+: rep.n  ( n8 -- ) fetchPC8 invert P> and >P ;
+: rep.e  ( n8 -- ) fetchPC8 0cf and invert P> and >P ; \ Mask with 11001111 
 
 \ switch processor modes (native/emulated). See p. 45 and 61
 : native ( -- )  
@@ -735,8 +730,6 @@ cr .( Defining addressing modes ...)
 \ Examples for the modes are given for the traditional syntax and for Typist's
 \ Assembler
 
-\ HIER HIER TEST THESE TODO 
-
 \ Absolute: "LDA $1000" / "lda 1000" #
 \ We need two different versions, one for instructions that affect data and take
 \ the DBR, and one for instructions that affect programs and take the PBR
@@ -744,31 +737,35 @@ cr .( Defining addressing modes ...)
 : mode.abs.PBR ( -- 65addr24 )  fetchPC16 mem16/PBR>24 ; 
 
 \ Absolute Indirect: "JMP ($1000)" / "jmp.i 1000"
-: mode.i  ( -- 65addr24)  next2bytes 00 mem16/bank>24 fetchPC16 mem16/PBR>24 ;
+: mode.i  ( -- 65addr24)  
+   fetchPC16 00 mem16/bank>24  fetch/wrap16 mem16/PBR>24 ;
 
 \ Absolute Indirect LONG: "JMP [$1000]" / "jmp.il 1000"
-: mode.il  ( -- 65addr24)  next2bytes 00 mem16/bank>24 fetch/wrap24 PC+2 ; 
+: mode.il  ( -- 65addr24)  fetchPC16 00 mem16/bank>24  fetch/wrap24 ; 
 
 \ Absolute Indexed X/Y (pp. 289-290): "LDA $1000,X" / "lda.x 1000"
 \ Assumes that X will be the correct width (8 or 16 bit)
+\ These DO NOT wrap to bank, so do not mask
 : mode.x  ( -- 65addr24 )  mode.abs.DBR  X @  + ;
 : mode.y  ( -- 65addr24 )  mode.abs.DBR  Y @  + ;
 
 \ Absolute X Indexed Indirect (p. 291): "JMP ($1000,X)" / "jmp.xi 1000"
-: mode.xi  ( -- 65addr24 )  next2bytes  X @ +  
-   mask16  PBR @  mem16/bank>24  fetch16 PC+2 ; 
+: mode.xi  ( -- 65addr24 )  
+   fetchPC16 X @ +  mask16  PBR @  mem16/bank>24  
+   fetch/wrap16 ; 
 
 \ Absolute Long: "LDA $100000" / "lda.l 100000"
-: mode.l  ( -- 65addr24)  next3bytes PC+3 ;
+: mode.l  ( -- 65addr24)  fetchPC24 ;
 
 \ Absolute Long X Indexed: "LDA $100000,X" / "lda.lx 100000"
 \ assumes that X will be the correct width (8 or 16 bit) 
+\ This DOES NOT wrap to bank 
 : mode.lx ( -- 65addr24)  mode.l  X @  + ; 
-\
+
 \ Immediate Mode: "LDA #$10" / "lda.# 10"
 \ Note that this mode does not advance the PC as it is used with A and XY so we
-\ have to do this by hand in the instructions themselves. Failure to do so was
-\ a common error during development
+\ have to include a PC+a or PC+xy in the instructions themselves. Failure to do
+\ so was a common error during development
 : mode.imm  ( -- 65addr24 )  PC24 ; 
 
 
@@ -792,7 +789,7 @@ cr .( Defining addressing modes ...)
 
 \ We do the first test first because we assume that most people are going to run
 \ the MPU in native mode and we get to quit earlier then
-: wrap2page? ( -- f )  e-flag set?  zero-dl? and  old-dp-opcode? and ; 
+: wrap2page? ( -- f )  e-flag set? ( TEST 1)  zero-dl? and  old-dp-opcode? and ; 
 
 \ Given the result of adding D with the byte given by the user and the X or
 \ Y index, wrap correctly to page if necessary
@@ -805,7 +802,7 @@ cr .( Defining addressing modes ...)
 
 \ If this wraps the page, it means be definition that the LSB of D was not zero,
 \ and so the legacy rules don't apply one way or another
-: mode.d-core ( -- 65addr16 )  next1byte D @ +  PC+1 ; 
+: mode.d-core ( -- 65addr16 )  fetchPC8  D @  + ; 
 
 \ Direct Page (DP) (pp. 94, 155, 278): "LDA $10" / "lda.d 10"
 \ Note that D can be relocated in emulated mode as well, see
@@ -852,7 +849,7 @@ cr .( Defining addressing modes ...)
 
 \ Stack Relative (p. 324): "LDA $10,S" / "lda.s 10"
 \ TODO handle page boundries / wrapping
-: mode.s ( -- 65addr24 ) next1byte  S @  +  mem16/bank00>24 PC+1 ; 
+: mode.s ( -- 65addr24 ) fetchPC8  S @  +  mem16/bank00>24 ; 
 
 \ Stack Relative Y Indexed: "LDA (10,S),Y" / "lda.siy 10"
 \ No "PC+1" because this is handled by MODE.S
@@ -989,26 +986,16 @@ cr .( Creating output functions ...)
    -1 +loop ; 
 
 : mvn-core ( -- ) 
-   next1byte  dup >r  PC+1  \ destination bank byte (!) next1byte
-   next1byte PC+1           \ source bank byte 
-
-   move-without-wrap? if 
-      no-wrap-move else 
-   mvn-slow then 
-
-   \ fake the results of the loop
-   0ffff C !  1 X +!  1 Y +!  r> DBR ! ; 
+   fetchPC8  dup >r   \ destination bank byte (!) 
+   fetchPC8           \ source bank byte 
+   move-without-wrap? if no-wrap-move else mvn-slow then 
+   0ffff C !  1 X +!  1 Y +!  r> DBR ! ;  \ we fake the loop results 
 
 : mvp-core ( -- ) 
-   next1byte  dup >r  PC+1  \ destination bank byte (!) next1byte
-   next1byte PC+1           \ source bank byte 
-
-   move-without-wrap? if 
-      no-wrap-move else 
-   mvn-slow then 
-
-   \ fake the results of the loop
-   0ffff C !  1 X +!  1 Y +!  r> DBR ! ; 
+   fetchPC8  dup >r  \ destination bank byte (!) 
+   fetchPC8          \ source bank byte 
+   move-without-wrap? if no-wrap-move else mvp-slow then 
+   0ffff C !  1 X +!  1 Y +!  r> DBR ! ;  \ we fake the loop results
 
 
 \ ---- OPCODE CORE ROUTINES ----
@@ -1016,51 +1003,57 @@ cr .( Defining core routines for opcodes )
 \ TODO Rewrite/optimize/refract these
 
 \ These all work in both 8- and 16-bit modes
-: and-core ( 65addr -- )  fetch.a mask.a C> and >C check-NZ.a ;
-: eor-core ( 65addr -- )  fetch.a mask.a C> xor >C check-NZ.a ; 
-: ora-core ( 65addr -- )  fetch.a mask.a C> or >C check-NZ.a ; 
+: and-core ( 65addr -- )  fetch/wrap.a mask.a C> and >C check-NZ.a ;
+: eor-core ( 65addr -- )  fetch/wrap.a mask.a C> xor >C check-NZ.a ; 
+: ora-core ( 65addr -- )  fetch/wrap.a mask.a C> or >C check-NZ.a ; 
 
 \ ASL-CORE is used for all, ASL-MEM for memory shifts 
 : asl-core ( u -- u )  dup mask-N.a test&set-c 1 lshift ; 
-: asl-mem ( addr -- )  dup fetch.a asl-core dup check-NZ.TOS swap store.a ; 
+: asl-mem ( addr -- )  
+   dup fetch/wrap.a asl-core dup check-NZ.TOS swap store/wrap.a ; 
 
 \ LSR-CORE is used for all, LSR-MEM for memory shifts
 : lsr-core ( u -- u )  dup mask-c test&set-c  1 rshift ; 
-: lsr-mem ( addr -- )  dup fetch.a lsr-core dup check-NZ.TOS swap store.a ; 
+: lsr-mem ( addr -- )  
+   dup fetch/wrap.a lsr-core dup check-NZ.TOS swap store/wrap.a ; 
 
 \ ROL-CORE is used for all, ROL-MEM for memory shifts
 : rol-core ( u -- u )  
    c-flag @  mask-c swap  dup mask-N.a test&set-c  1 lshift or ;
-: rol-mem ( addr -- )  dup fetch.a rol-core dup check-NZ.TOS swap store.a ; 
+: rol-mem ( addr -- )  
+   dup fetch/wrap.a rol-core dup check-NZ.TOS swap store/wrap.a ; 
 
 \ ROR-CORE is used for all, ROR-MEM for memory shifts
 : ror-core ( u -- u )  
    c-flag @ mask-N.a swap  dup mask-c test&set-c  1 rshift or ; 
-: ror-mem ( addr -- )  dup fetch.a ror-core dup check-NZ.TOS swap store.a ; 
+: ror-mem ( addr -- )  
+   dup fetch/wrap.a ror-core dup check-NZ.TOS swap store/wrap.a ; 
 
-: bit-core ( 65addr -- ) fetch.a 
+: bit-core ( 65addr -- ) fetch/wrap.a 
    dup mask-N.a test&set-n  dup mask-V.a test&set-v  C> and  check-Z ;  
 
 : trb-core ( 65addr -- )  
-   dup fetch.a 
+   dup fetch/wrap.a 
    dup C> and check-Z
-   C>  true mask.a xor  and  swap store.a ; 
+   C>  true mask.a xor  and  swap store/wrap.a ; 
 
 : tsb-core ( 65addr -- )
-   dup fetch.a 
+   dup fetch/wrap.a 
    dup C> and check-Z
-   C> or swap store.a ; 
+   C> or swap store/wrap.a ; 
 
 \ INC and DEC for the Accumulator
 : inc.accu ( -- ) C> 1+ mask.a >C check-NZ.a ; 
 : dec.accu ( -- ) C> 1- mask.a >C check-NZ.a ; 
 
 \ INC and DEC for memory
-: inc.mem  ( 65addr -- )  dup fetch.a 1+ mask.a dup check-NZ.TOS swap store.a ; 
-: dec.mem  ( 65addr -- )  dup fetch.a 1- mask.a dup check-NZ.TOS swap store.a ; 
+: inc.mem  ( 65addr -- )  
+   dup fetch/wrap.a 1+ mask.a dup check-NZ.TOS swap store/wrap.a ; 
+: dec.mem  ( 65addr -- )  
+   dup fetch/wrap.a 1- mask.a dup check-NZ.TOS swap store/wrap.a ; 
 
-: cmp-core ( u 65addr -- )  fetch.a cmp.a ; 
-: cpxy-core ( u 65addr -- )  fetch.xy cmp.xy ; 
+: cmp-core ( u 65addr -- )  fetch/wrap.a cmp.a ; 
+: cpxy-core ( u 65addr -- )  fetch/wrap.xy cmp.xy ; 
 
 : lda-core ( 65addr -- )  fetch/wrap.a  >C  check-NZ.a ;
 : ldx-core ( 65addr -- )  fetch/wrap.xy  X !  check-NZ.x ;
@@ -1077,14 +1070,14 @@ cr .( Defining core routines for opcodes )
    r> C> or  r> C> or  and  mask-N.a  0<> v-flag ! ;  \ calculate Overflow
 
 \ Common routine for 8- and 16-bit binary addition 
-: adc-bin ( addr -- ) fetch.a adc-sbc-core ; 
+: adc-bin ( addr -- ) fetch/wrap.a adc-sbc-core ; 
    
 \ Routines for 8- and 16-bit BCD addition
 \ WARNING: The v-flag is currently not correctly emulated in decimal mode, see
 \ http://www.6502.org/tutorials/vflag.html for details 
 \ TODO see if we can fold this into one routine to simplify table
-: adc-bcd.8 ( addr -- ) fetch.a C> bcd-add-bytes >C ; 
-: adc-bcd.16 ( addr -- ) fetch.a C> bcd-add-words >C ; 
+: adc-bcd.8 ( addr -- ) fetch/wrap.a C> bcd-add-bytes >C ; 
+: adc-bcd.16 ( addr -- ) fetch/wrap.a C> bcd-add-words >C ; 
 
 create additions
    ' adc-bin ,    \  8 bit binary:  D clear, a16flag clear (00) 
@@ -1103,15 +1096,15 @@ create additions
 : invert-borrow ( -- ) c-flag dup @ invert  swap ! ; 
 
 \ Common routine for 8- and 16-bit binary subtraction
-: sbc-bin ( addr -- ) fetch.a invert adc-sbc-core invert-borrow ; 
+: sbc-bin ( addr -- ) fetch/wrap.a invert adc-sbc-core invert-borrow ; 
 
 \ Routines for 8- and 16-bit BCD subtraction
 \ WARNING: The v-flag is currently not correctly emulated in decimal mode, see
 \ http://www.6502.org/tutorials/vflag.html for details 
 \ Also see http://visual6502.org/wiki/index.php?title=6502DecimalMode
 \ TODO see if we can fold this into one routine to simplify table
-: sbc-bcd.8 ( addr -- ) fetch.a C> bcd-sub-bytes >C ; 
-: sbc-bcd.16 ( addr -- ) fetch.a C> bcd-sub-words >C ; 
+: sbc-bcd.8 ( addr -- ) fetch/wrap.a C> bcd-sub-bytes >C ; 
+: sbc-bcd.16 ( addr -- ) fetch/wrap.a C> bcd-sub-words >C ; 
 
 create subtractions
    ' sbc-bin ,    \  8 bit binary:  D clear, a16flag clear (00) 
@@ -1166,9 +1159,9 @@ cr .( Defining opcode routines themselves ... )
 : opc-1F ( ora.lx )  mode.lx ora-core ; 
 \ STEP already increases the PC by one, so we only need to add one byte because
 \ the address pushed is the last byte of the instruction
-: opc-20 ( jsr )  PC @ 1+  push16 next2bytes  PC ! ;
+: opc-20 ( jsr )  PC @ 1+  push16 fetchPC16  PC ! ;
 : opc-21 ( and.dxi )  mode.dxi and-core ; 
-: opc-22 ( jsr.l )  PC24  2 +  push24 next3bytes 24>PC24! ;
+: opc-22 ( jsr.l )  PC24  2 +  push24 fetchPC24 24>PC24! ;
 : opc-23 ( and.s )  mode.s and-core ;  \ New S opcode
 : opc-24 ( bit.d )  mode.d bit-core ; 
 : opc-25 ( and.d )  mode.d and-core ; 
@@ -1211,7 +1204,7 @@ cr .( Defining opcode routines themselves ... )
 : opc-49 ( eor.# )  mode.imm eor-core PC+a ;
 : opc-4A ( lsr.a )  C> lsr-core >C check-NZ.a ;  
 : opc-4B ( phk )  PBR @  push8 ;
-: opc-4C ( jmp )  next2bytes  PC ! ;
+: opc-4C ( jmp )  fetchPC16  PC ! ;
 : opc-4D ( eor )  mode.abs.DBR eor-core ; 
 : opc-4E ( lsr )  mode.abs.DBR lsr-mem ; 
 : opc-4F ( eor.l )  mode.l eor-core ; 
@@ -1227,15 +1220,15 @@ cr .( Defining opcode routines themselves ... )
 : opc-59 ( eor.y )  mode.y eor-core ; 
 : opc-5A ( phy )  Y @ push.xy ; 
 : opc-5B ( tcd )  C @  mask16 dup check-NZ.a  D ! ;
-: opc-5C ( jmp.l )  next3bytes 24>PC24! ; 
+: opc-5C ( jmp.l )  fetchPC24 24>PC24! ; 
 : opc-5D ( eor.x )  mode.x eor-core ; 
 : opc-5E ( lsr.x )  mode.x lsr-mem ; 
 : opc-5F ( eor.lx )  mode.lx eor-core ; 
 : opc-60 ( rts )  pull16 1+  PC ! ;
 : opc-61 ( adc.dxi )  mode.dxi adc-core ; 
-: opc-62 ( phe.r )  next2bytes PC @ + push16 PC+2 ; 
+: opc-62 ( phe.r )  fetch/wrap16  PC @  +  push16 PC+2 ; \ TODO test
 : opc-63 ( adc.s )  mode.s adc-core ;  \ New S opcode
-: opc-64 ( stz.d )  0 mode.d store.a ; 
+: opc-64 ( stz.d )  0 mode.d store/wrap.a ; 
 : opc-65 ( adc.d )  mode.d adc-core ;  
 : opc-66 ( ror.d )  mode.d ror-mem ; 
 : opc-67 ( adc.dil )  mode.dil adc-core ; \ New DP opcode 
@@ -1251,7 +1244,7 @@ cr .( Defining opcode routines themselves ... )
 : opc-71 ( adc.diy )  mode.diy adc-core ;  
 : opc-72 ( adc.di )  mode.di  adc-core ; 
 : opc-73 ( adc.siy )  mode.siy adc-core ; \ New S opcode 
-: opc-74 ( stz.dx )  0 mode.dx store.a ; 
+: opc-74 ( stz.dx )  0 mode.dx store/wrap.a ; 
 : opc-75 ( adc.dx)  mode.dx adc-core ; 
 : opc-76 ( ror.dx )  mode.dx ror-mem ;
 : opc-77 ( adc.dily )  mode.dily adc-core ; \ New DP opcode
@@ -1264,41 +1257,41 @@ cr .( Defining opcode routines themselves ... )
 : opc-7E ( ror.x )   mode.x ror-mem ; 
 : opc-7F ( adc.lx ) mode.lx adc-core ; 
 : opc-80 ( bra )  takebranch ;
-: opc-81 ( sta.dxi )  C> mode.dxi store.a ; 
-: opc-82 ( bra.l )  next2bytes signextend.l  2 +  PC ! ; 
-: opc-83 ( sta.s )  C> mode.s store.a ;  \ New S opcode 
-: opc-84 ( sty.d )  Y @  mode.d store.xy ;
-: opc-85 ( sta.d )  C> mode.d store.a ; 
-: opc-86 ( stx.d )  X @  mode.d store.xy ;  
-: opc-87 ( sta.dil )  C> mode.dil store.a ; \ New DP opcode
+: opc-81 ( sta.dxi )  C> mode.dxi store/wrap.a ; 
+: opc-82 ( bra.l )  fetchPC16 signextend.l  2 +  PC ! ; 
+: opc-83 ( sta.s )  C> mode.s store/wrap.a ;  \ New S opcode 
+: opc-84 ( sty.d )  Y @  mode.d store/wrap.xy ;
+: opc-85 ( sta.d )  C> mode.d store/wrap.a ; 
+: opc-86 ( stx.d )  X @  mode.d store/wrap.xy ;  
+: opc-87 ( sta.dil )  C> mode.dil store/wrap.a ; \ New DP opcode
 : opc-88 ( dey )  Y @  1- mask.xy  Y !  check-NZ.y ;
-: opc-89 ( bit.# )  C> mode.imm fetch.a and check-Z PC+a ; 
+: opc-89 ( bit.# )  C> mode.imm fetch/wrap.a and check-Z PC+a ; 
 : opc-8A ( txa )  X @  >C check-NZ.a ; 
 : opc-8B ( phb )  DBR @  push8 ; 
-: opc-8C ( sty )  Y @  mode.abs.DBR store.xy ;
-: opc-8D ( sta )  C>  mode.abs.DBR store.a ; 
-: opc-8E ( stx )  X @  mode.abs.DBR store.xy ;
-: opc-8F ( sta.l ) C> mode.l store.a ; 
+: opc-8C ( sty )  Y @  mode.abs.DBR store/wrap.xy ;
+: opc-8D ( sta )  C>  mode.abs.DBR store/wrap.a ; 
+: opc-8E ( stx )  X @  mode.abs.DBR store/wrap.xy ;
+: opc-8F ( sta.l ) C> mode.l store/wrap.a ; 
 : opc-90 ( bcc )  c-flag clear? branch-if-true ; 
-: opc-91 ( sta.diy )  C> mode.diy store.a ;  
-: opc-92 ( sta.di ) C> mode.di store.a ;
-: opc-93 ( sta.siy )  C> mode.siy store.a ;  \ New S opcode
-: opc-94 ( sty.dx )  Y @  mode.dx store.xy ; 
-: opc-95 ( sta.dx )  C> mode.dx store.a ; 
-: opc-96 ( stx.dy )  X @  mode.dy store.xy ; 
-: opc-97 ( sta.dily )  C> mode.dily store.a ; \ New DP opcode
+: opc-91 ( sta.diy )  C> mode.diy store/wrap.a ;  
+: opc-92 ( sta.di ) C> mode.di store/wrap.a ;
+: opc-93 ( sta.siy )  C> mode.siy store/wrap.a ;  \ New S opcode
+: opc-94 ( sty.dx )  Y @  mode.dx store/wrap.xy ; 
+: opc-95 ( sta.dx )  C> mode.dx store/wrap.a ; 
+: opc-96 ( stx.dy )  X @  mode.dy store/wrap.xy ; 
+: opc-97 ( sta.dily )  C> mode.dily store/wrap.a ; \ New DP opcode
 : opc-98 ( tya )  Y @  >C check-NZ.a ; 
-: opc-99 ( sta.y )  C> mode.y store.a ; 
+: opc-99 ( sta.y )  C> mode.y store/wrap.a ; 
 : opc-9A ( txs ) 
    X @  e-flag set? if  \ emulation mode, hi byte paranoided to 01
       mask8  0100 or else
          x-flag set? if mask8 then  \ native mode, 8 bit X; hi byte is 00
       then  S ! ; 
 : opc-9B ( txy )  X @  Y !  check-NZ.y ;
-: opc-9C ( stz )  0 mode.abs.DBR store.a ; 
-: opc-9D ( sta.x ) C> mode.x store.a ; 
-: opc-9E ( stz.x )  0 mode.x store.a ;
-: opc-9F ( sta.lx ) C> mode.lx store.a ;
+: opc-9C ( stz )  0 mode.abs.DBR store/wrap.a ; 
+: opc-9D ( sta.x ) C> mode.x store/wrap.a ; 
+: opc-9E ( stz.x )  0 mode.x store/wrap.a ;
+: opc-9F ( sta.lx ) C> mode.lx store/wrap.a ;
 : opc-A0 ( ldy.# )  mode.imm ldy-core PC+xy ;
 : opc-A1 ( lda.dxi )  mode.dxi lda-core ; 
 : opc-A2 ( ldx.# )  mode.imm ldx-core PC+xy ;
@@ -1324,7 +1317,7 @@ cr .( Defining opcode routines themselves ... )
 : opc-B6 ( ldx.dy )  mode.dy ldx-core ; 
 : opc-B7 ( lda.dily )  mode.dily lda-core ; \ New DP opcode
 : opc-B8 ( clv ) v-flag clear ; 
-: opc-B9 ( lda.y )  mode.y fetch.a check-NZ.a ;
+: opc-B9 ( lda.y )  mode.y fetch/wrap.a check-NZ.a ;
 : opc-BA ( tsx )  S @  xy16flag clear? if mask8 then  X !  check-NZ.x ;  
 : opc-BB ( tyx )  Y @  X !  check-NZ.x ;
 : opc-BC ( ldy.x )  mode.x ldy-core ; 
@@ -1393,7 +1386,7 @@ cr .( Defining opcode routines themselves ... )
 : opc-F1 ( sbc.diy )  mode.diy sbc-core ;  
 : opc-F2 ( sbc.di )  mode.di sbc-core ;  
 : opc-F3 ( sbc.siy )  mode.siy sbc-core ; \ New S opcode
-: opc-F4 ( phe.# )  next2bytes push16 PC+2 ;
+: opc-F4 ( phe.# )  fetchPC16 push16 ;
 : opc-F5 ( sbc.dx )  mode.dx sbc-core ; 
 : opc-F6 ( inc.dx )  mode.dx inc.mem ; 
 : opc-F7 ( sbc.dily )  mode.dily sbc-core ;  \ New DP opcode
@@ -1444,9 +1437,11 @@ cr .( Setting up interrupts ...)
 : irq-i ( -- )  i-flag clear? if interrupt-core irq-v fetch16  PC ! then ; 
 : nmi-i ( -- )  interrupt-core nmi-v fetch16  PC ! ; 
 
+\ Reset doesn't automatically start running but puts the correct vector in PC
+\ and then waits for the user to type either RUN or STEP
 : reset-i ( -- )  \ p.201 and http://www.pagetable.com/?p=410
-   i-flag set  d-flag clear  \ c, n, v, and z flags are in undefined state
-   emulated  \ sets e, m, x-flags; MSB of X and Y are set to zero 
+   i-flag set  d-flag clear    \ c, n, v, and z flags are in undefined state
+   emulated             \ sets e, m, x-flags; MSB of X and Y are set to zero 
    00 PBR !  00 DBR !  0000 D ! 
    \ LSB of S is decreased by 3, see http://forum.6502.org/viewtopic.php?f=4&t=2258
    S @  3 - mask8  0100 or  S !  \ only MSB is reset to 01 
@@ -1469,8 +1464,7 @@ cr .( Setting up interrupts ...)
 \ operand (if available). We save the current opcode for tricky things like
 \ emulated DP mode wrapping
 : step ( -- )  
-   next1byte  dup current-opcode !  cells  opc-jumptable +  @ 
-   PC+1 execute ; 
+   fetchPC8  dup current-opcode !  cells  opc-jumptable +  @  execute ; 
 : run ( -- )  begin step again ; 
 
 \ ---- START EMULATION ----

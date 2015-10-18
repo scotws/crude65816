@@ -257,8 +257,8 @@ defer store.a    defer store.xy
 defer store/wrap.a   defer store/wrap.xy
 : store/wrap8  ( u8 65addr24 -- ) store8 ; 
 : store/wrap16  ( u16 65addr24 -- ) 
-   2dup swap lsb swap store8           \ LSB
-   swap msb swap 1 65addr+/wrap store8 ; \ MSBS 
+   2dup swap lsb swap store8             \ LSB
+   swap msb swap 1 65addr+/wrap store8 ; \ MSB 
 
 
 \ ---- FLAGS ----
@@ -776,64 +776,60 @@ cr .( Defining addressing modes ...)
 \ We only wrap to the current page if all following three conditions are true:
 \ We are in emulation mode, the LSB of D is zero (that is, D is on a page
 \ boundry), and we are dealing with an old opcode that was available on the
-\ 65c02. Test 1 is already defined via e-flag
-\ TODO make this a more general word to test page boundries; change name
-: zero-dl? ( -- f )  D @  mask8 0= ;   \ TEST 2 
+\ 65c02. TEST 1 is already defined via e-flag
+: on-page-boundry? ( 65addr -- f )  mask8 0= ;   \ TEST 2 
 
 \ The new DP opcodes with indexing which are never ever wrapped to the page are
 \ all have the LSB of 7, that is, 07, 17, etc in HEX. This means we don't have
 \ to check them in a table, but can use a function
-: old-dp-opcode? ( u8 -- f )  mask8  7 = invert ;  \ TEST 3
+: old-dp-opcode? ( u8 -- f )  
+   current-opcode @  0F and  7 = invert ;  \ TEST 3
 
-\ We do the first test first because we assume that most people are going to run
-\ the MPU in native mode and we get to quit earlier then
-: wrap2page? ( -- f )  e-flag set? ( TEST 1)  zero-dl? and  old-dp-opcode? and ; 
+\ We do the e-flag test first because we assume that most people are going to
+\ run the MPU in native mode and we get to quit earlier then
+: wrap2page? ( -- f )  
+   e-flag set?   D @  on-page-boundry? and   old-dp-opcode? and ; 
 
-\ Given the result of adding D with the byte given by the user and the X or
-\ Y index, wrap correctly to page if necessary
+\ Given the result of adding D with the byte from the operand as well as the 
+\ X or Y index, wrap correctly to page if necessary
 : add&wrap ( u16 u8|u16 -- u16 ) 
-   wrap2page? if 
-      over + mask8   \ discard MSB of addition, keeping LSB
-      swap 0ff00 and \ keep MSB of D, thereby wrapping
-      or else              
-      + then ;       \ no page wrap, so just add; caller will wrap to bank 
+   wrap2page?
+      if over + mask8  \ discard MSB of addition, keeping LSB
+      swap 0ff00 and   \ keep MSB of D, thereby wrapping
+      or else          \ put LSB and MSB back together
+      +  then ;        \ no page wrap, so just add; caller will wrap to bank 
 
-\ If this wraps the page, it means be definition that the LSB of D was not zero,
-\ and so the legacy rules don't apply one way or another
-: mode.d-core ( -- 65addr16 )  fetchPC8  D @  + ; 
+\ If this wraps the page, it means by definition that the LSB of D was not zero,
+\ and so the legacy rules don't apply one way or another, so we don't need to do
+\ any fancy testing. MASK16 is paranoid 
+: mode.d-core ( -- 65addr16 )  fetchPC8  D @  +  mask16 ;
 
 \ Direct Page (DP) (pp. 94, 155, 278): "LDA $10" / "lda.d 10"
 \ Note that D can be relocated in emulated mode as well, see
 \ http://forum.6502.org/viewtopic.php?f=8&t=3459&p=40389#p40370 
-: mode.d  ( -- 65addr24)  mode.d-core  mem16/bank00>24 ;
+: mode.d  ( -- 65addr24)  mode.d-core mem16/bank00>24 ;
 
 \ DP Indexed X/Y (p. 299): "LDA $10,X" / "lda.dx 10"
-\ TODO handle page boundries / wrapping
-: mode.dx  ( -- 65addr24)  mode.d-core  X @ +  mem16/bank00>24 ; 
-: mode.dy  ( -- 65addr24)  mode.d-core  Y @ +  mem16/bank00>24 ; 
+: mode.dx  ( -- 65addr24)  mode.d-core  X @  add&wrap mem16/bank00>24 ; 
+: mode.dy  ( -- 65addr24)  mode.d-core  Y @  add&wrap mem16/bank00>24 ; 
 
 \ DP Indirect  (p. 302):  "LDA ($10)" / "lda.di 10"
 \ Note this uses the Data Bank Register DBR, not PBR
 : mode.di  ( -- 65addr24)  
-   mode.d-core  00 mem16/bank>24  fetch16  DBR @  mem16/bank>24 ;
+   mode.d-core mem16/bank00>24  fetch/wrap16  DBR @  mem16/bank>24 ;
 
 \ DP Indirect X Indexed (p. 300): "LDA ($10,X)" / "lda.dxi 10"
-\ TODO handle page boundries / wrapping
 : mode.dxi  ( -- 65addr24)  
-   mode.d-core  X @ +  mem16/bank00>24 
-   fetch16  DBR @ mem16/bank>24 ; 
+   mode.dx  fetch/wrap16  DBR @ mem16/bank>24 ; 
 
 \ DP Indirect Y Indexed (p. 304): "LDA ($10),Y" / "lda.diy 10"
 \ Does not need a "PC+1" because this is contained in MODE.DI
-\ TODO handle page boundries / wrapping
 : mode.diy  ( -- 65addr24)  mode.di  Y @ + ; 
 
 \ DP Indirect Long: "LDA [$10]" / "lda.dil 10"
-: mode.dil  ( -- 65addr24) mode.d-core  mem16/bank00>24 fetch24 ; 
+: mode.dil  ( -- 65addr24) mode.d-core  mem16/bank00>24 fetch/wrap24 ; 
 \
 \ DP Indirect Long Y Addressing : "LDA [$10],y" / "lda.dily 10"
-\ TODO handle page boundries / wrapping 
-\ TODO KNOWN ISSUE: WRAPING BROKEN IF Y IN 16 BIT MODE
 : mode.dily  ( -- 65addr24) mode.dil  Y @ + ; 
 
 

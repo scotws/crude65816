@@ -1,6 +1,6 @@
 \ Configuration file for A Crude 65816 Emulator
 \ Scot W. Stevenson <scot.stevenson@gmail.com>
-\ This version: 17. Oct 2015
+\ This version: 19. Oct 2015
 
 \ This file must be loaded before io.fs
 
@@ -20,7 +20,7 @@
 
 \ Klaus2m5's 6502 function tests, ALPHA only  TODO remove this 
 \ 00000 s" tests/6502_functional_test.bin" loadrom
-\
+
 \ Test program from assembler, for ALPHA only TODO remove this 
 \ 00e000 s" ../tasm65816/rom.bin" loadrom   
 

@@ -1,4 +1,4 @@
-# A Crude 65816 Emulator
+# A Crude Emulator for the 65816 in Forth
 
 Scot W. Stevenson <scot.stevenson@gmail.com>
 
@@ -23,7 +23,7 @@ You an either "run" or "step" through whatever is setup in CONFIG.FS. There is a
 discussion of the program [at 6502.org]
 (http://forum.6502.org/viewtopic.php?f=8&t=3306).
 
-### WHAT'S ALL THIS HERE NOW ANYWAY?
+### SO WHAT'S THIS NOW?
 
 The 65816 is the ["big sibling"](http://en.wikipedia.org/wiki/WDC_65816/65802) 
 of the venerable 6502 8-bit processor. It is a hybrid processor that can run in

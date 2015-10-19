@@ -1,11 +1,12 @@
 TODO for A Crude 65816 Emulator
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 27. May 2015
-This version: 17. Oct 2015
+This version: 19. Oct 2015
 
 
 IMMEDIATELY 
 
+- Begin extensive testing, create testing suite for native mode
 
 SHORT TERM
 
@@ -13,6 +14,8 @@ SHORT TERM
 
 
 LONG TERM 
+
+- Consider rewriting Direct Page Modes with a DEFER construct so native mode avoids all the tests; compare stack code
 
 - Add FREEZE/THAW commands to save state of emulator 
 
@@ -37,5 +40,3 @@ QUESTIONS
 
 
 END
-
-

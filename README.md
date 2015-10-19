@@ -19,8 +19,7 @@ and then load the emulator with
 include crude65816.fs
 ```
 
-You an either "run" or "step" the default monitor program. That doesn't do jack
-at the moment, really, but will in the future. ALPHA, remember? There is a
+You an either "run" or "step" through whatever is setup in CONFIG.FS. There is a
 discussion of the program [at 6502.org]
 (http://forum.6502.org/viewtopic.php?f=8&t=3306).
 
@@ -38,8 +37,9 @@ code at first.
 Unfortunately, emulators for the 65816 are few and far between, and so I decided
 I would have to write my own. This is it. It is horribly crude -- hence the
 name. For instance, it completely ignores all timing and clock considerations.
+But it works. 
 
-### MOTHER OF DRAGONS, WHY IN FORTH?
+### BUT MOTHER OF DRAGONS, WHY IN FORTH?
 
 The Übersquirrel Mark Zero taught me how amazingly powerful Forth is on simple
 hardware, how short the programs can be, and how fun it is just to code it. In
@@ -51,5 +51,5 @@ See `docs/MANUAL.txt` for further information.
 
 ### DEVELOPMENT SPEED
 
-This program is a hobby, and is developed in fits and starts. Feedback is still most
+This program is a hobby, and is developed in fits and starts. Feedback is  most
 welcome. 

@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 09. Jan 2015
-\ This version: 18. Oct 2015
+\ This version: 19. Oct 2015
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version ALPHA  18. Oct 2015)  
+cr .( Version ALPHA  19. Oct 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -227,7 +227,7 @@ defer fetchPC.a   defer fetchPC.xy
 
 \ -- STORE IN MEMORY -- 
 
-\ (See remarks on fetching data from memory) 
+\ See remarks on fetching data from memory 
 
 \ Simply store routines that do not affect the PC and ignore wrapping. STORE8
 \ includes the check for special addresses (I/O chips, etc) so all other store
@@ -488,35 +488,61 @@ cr .( Setting up branching ...)
 \ --- STACK STUFF ----
 cr .( Setting up stack ...)
 
-\ increase stack pointer. Because of the MASK16, this automatically wraps to
-\ bank 0 
-defer S++.a  defer S++.xy
-: S++8 ( -- )  S @  1+  mask8  0100 OR  S ! ; 
-: S++16 ( -- )  S @  1+  mask16  S ! ; 
+\ Stack wrapping is just about as much fun as Direct Page wrapping. When S is
+\ increased or decreased, we wrap to bank 00, page 01 if two conditions are
+\ true: We are in emulated mode and we're dealing with an "old" instruction
+\ that was already available on the 65C02. Otherwise, we just wrap to bank 0.
+\ See http://6502.org/tutorials/65c816opcodes.html#5.22 for details. Remember
+\ S points to the next empty stack entry
+defer S++   defer S--
 
-\ decrease stack pointer, hardcoding 01 as MSB of pointer. Because of the
-\ MASK16, this automatically wraps to bank 0
-defer S--.a  defer S--.xy
-: S--8 ( -- )  S @  1-  mask8  0100 OR  S ! ; 
-: S--16 ( -- )  S @  1-  mask16  S ! ; 
+\ There are 10 old instructions that affect the stack and 11 new ones. Searching
+\ through the old ones is slightly more efficient
+create old-s-opcodes
+   08 c, ( php)  20 c, ( jsr)  48 c, ( pha)  5a c, ( phy)  0da c, ( phx)  
+   28 c, ( plp)  60 c, ( rts)  68 c, ( pla)  7a c, ( ply)  0fa c, ( plx) 
+
+: new-s-opcode? ( -- f )
+   true  current-opcode @  ( f u8) 
+   0a 0 do  
+      dup  old-s-opcodes i +  c@
+      = if nip false swap then
+   loop drop ; 
+
+\ Increase and decrease stack pointer in native mode or if emulated mode with
+\ new instructions. We wrap to bank 0. This is the fast, easy case we like. 
+: S++.n ( -- ) S @  1+ mask16  S ! ; 
+: S--.n ( -- ) S @  1- mask16  S ! ; 
+
+\ Increase or decrease the stack pointer by one, wrapping to page 01 and bank 00
+\ boundries
+\ TODO consider factoring out masking part here and in S++.n
+: S++/wrap ( -- ) S @  1+ mask8  0100 or  S ! ; \ mask8 includes wrap to bank
+: S--/wrap ( -- ) S @  1- mask8  0100 or  S ! ; \ mask8 includes wrap to bank
+
+\ If this is a new opcode, we have to wrap to page 01
+: S++.e ( -- ) new-s-opcode? if S++.n else S++/wrap then ; 
+: S--.e ( -- ) new-s-opcode? if S--.n else S--/wrap then ; 
 
 \ Push stuff to stack. Use the naked STORE8 routine here because we don't want
-\ to touch the PC and S--8 handles the wrapping stuff
+\ to touch the PC and S++ handles all the wrapping problems. PUSH8 is the base
+\ word for all other forms.
 defer push.a  defer push.xy
-: push8 ( n8 -- )  S @  store8  S--8 ; 
+: push8 ( n8 -- )  S @  store8  S-- ; 
 : push16 ( n16 -- )  16>lsb/msb push8 push8 ; 
 : push24 ( n24 -- )  24>bank/msb/lsb  rot push8  swap push8  push8 ; 
 
 \ Pull stuff from stack. Use the naked FETCH8 routine here because we don't
-\ want to touch the PC and S++8 handles the wrapping stuff
+\ want to touch the PC and S++ handles the wrapping problems. PULL8 is the base
+\ word for all other forms
 defer pull.a  defer pull.xy
-: pull8 ( -- n8 )  S++8  S @  fetch8 ; 
+: pull8 ( -- n8 )  S++  S @  fetch8 ; 
 : pull16 ( -- n16 )  pull8 pull8 lsb/msb>16 ; 
 : pull24 ( -- n24 )  pull8 pull8 pull8 lsb/msb/bank>24 ; 
-   
+
 
 \ --- INTERRUPT ROUTINES ---
-cr .( Setting up interrupt stuff ...)
+cr .( Setting up interrupt routines ...)
 
 \ We do not use the BRK command to drop out of a running loop during emulation,
 \ this is the job of WAI and STP. 
@@ -563,8 +589,6 @@ variable xy16flag   xy16flag clear
    ['] check-Z.a16 is check-Z.a
    ['] check-NZ.8 is check-NZ.TOS
    ['] cmp16 is cmp.a
-   ['] S++16 is S++.a
-   ['] S--16 is S--.a
    ['] push16 is push.a 
    ['] pull16 is pull.a
    ['] mask16 is mask.a
@@ -585,8 +609,6 @@ variable xy16flag   xy16flag clear
    ['] check-Z.a8 is check-Z.a
    ['] check-NZ.8 is check-NZ.TOS
    ['] cmp8 is cmp.a
-   ['] S++8 is S++.a
-   ['] S--8 is S--.a
    ['] push8 is push.a 
    ['] pull8 is pull.a
    ['] mask8 is mask.a
@@ -606,8 +628,6 @@ variable xy16flag   xy16flag clear
    ['] check-N.x16 is check-N.x
    ['] check-N.y16 is check-N.y
    ['] cmp16 is cmp.xy
-   ['] S++16 is S++.xy
-   ['] S--16 is S--.xy
    ['] push16 is push.xy 
    ['] pull16 is pull.xy
    X @  00FF AND  X !   Y @  00FF AND  Y !  \ paranoid
@@ -623,8 +643,6 @@ variable xy16flag   xy16flag clear
    ['] check-N.x8 is check-N.x
    ['] check-N.y8 is check-N.y
    ['] cmp8 is cmp.xy
-   ['] S++8 is S++.xy
-   ['] S--8 is S--.xy
    ['] push8 is push.xy 
    ['] pull8 is pull.xy
    X @  00FF AND  X !   Y @  00FF AND  Y !  
@@ -658,17 +676,15 @@ variable xy16flag   xy16flag clear
 
    flag-modeswitch ; 
 
-\ Return from interrupt
-\ This needs to come after the status byte routines but before the switch of the
-\ processor modes
+\ Return from interrupt. This needs to come after the status byte routines but
+\ before the switch of the processor modes
 defer rti.a
 : rti-core ( -- )  pull8 >P  pull16 PC ! ; 
 : rti.e  ( -- )  rti-core ; 
 : rti.n  ( -- )  rti-core  pull8 PBR ! ; 
 
-\ SEP, REP
-\ This needs to come after the status byte routines but before the switch of the
-\ processor modes
+\ SEP, REP. These need to come after the status byte routines but before the
+\ switch of the processor modes
 defer sep.a
 : sep.n  ( n8 -- ) P> fetchPC8 or >P ;
 : sep.e  ( n8 -- ) fetchPC8 0cf and P> or >P ; \ Mask with 11001111 
@@ -682,6 +698,8 @@ defer rep.a
    e-flag clear
    m-flag set
    x-flag set
+   ['] S++.n is S++
+   ['] S--.n is S--
    ['] brk.n is brk.a
    ['] cop.n is cop.a 
    ['] rti.n is rti.a 
@@ -702,6 +720,8 @@ defer rep.a
    a:8   xy:8
    S @  00FF AND  0100 OR  S ! \ stack pointer to 0100
    0000 D !  \ direct page register initialized to zero 
+   ['] S++.e is S++
+   ['] S--.e is S--
    ['] brk.e is brk.a
    ['] cop.e is cop.a 
    ['] rti.e is rti.a 
@@ -773,17 +793,21 @@ cr .( Defining addressing modes ...)
 \ between page and bank wrapping. See
 \ http://forum.6502.org/viewtopic.php?f=8&t=3459&start=30#p40855 . 
 
+\ TODO consider using a DEFER statement instead to distinguish between emulated
+\ and native modes for speed, keeping the tests in emulated mode only; compare
+\ code for stack handling  
+
 \ We only wrap to the current page if all following three conditions are true:
 \ We are in emulation mode, the LSB of D is zero (that is, D is on a page
 \ boundry), and we are dealing with an old opcode that was available on the
 \ 65c02. TEST 1 is already defined via e-flag
 : on-page-boundry? ( 65addr -- f )  mask8 0= ;   \ TEST 2 
 
-\ The new DP opcodes with indexing which are never ever wrapped to the page are
+\ The new DP opcodes with indexing which are never ever wrapped to the page
 \ all have the LSB of 7, that is, 07, 17, etc in HEX. This means we don't have
-\ to check them in a table, but can use a function
-: old-dp-opcode? ( u8 -- f )  
-   current-opcode @  0F and  7 = invert ;  \ TEST 3
+\ to check them in a table, but can use a function. Life is good. 
+: old-dp-opcode? ( -- f )  
+   current-opcode @  0F and  7 =  invert ;  \ TEST 3
 
 \ We do the e-flag test first because we assume that most people are going to
 \ run the MPU in native mode and we get to quit earlier then
@@ -834,20 +858,12 @@ cr .( Defining addressing modes ...)
 
 
 \ -- STACK MODES -- 
-\ As DP modes, these are a pain, see same link for details
-
-: old-s-opcode? ; \ TODO 
-
-\ We only wrap to page 01, bank 00 if these two conditions are true 
-: page-wrap-s? ( -- f )  e-flag set?  old-s-opcode? and ; 
 
 \ Stack Relative (p. 324): "LDA $10,S" / "lda.s 10"
-\ TODO handle page boundries / wrapping
 : mode.s ( -- 65addr24 ) fetchPC8  S @  +  mem16/bank00>24 ; 
 
 \ Stack Relative Y Indexed: "LDA (10,S),Y" / "lda.siy 10"
 \ No "PC+1" because this is handled by MODE.S
-\ TODO handle page boundries / wrapping
 : mode.siy  ( -- 65addr24 )  mode.s  Y @ +  DBR @  mem16/bank>24 ; 
 
 

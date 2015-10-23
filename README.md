@@ -10,7 +10,7 @@ This is an ALPHA version of an emulator for the 65816 8/16-bit CPU in Gforth.
 If you must jump in without reading the documentation, start it with 
 
 ```
-gforth -m 64M 
+gforth -m 32M 
 ```
 
 and then load the emulator with

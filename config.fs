@@ -1,6 +1,6 @@
 \ Configuration file for A Crude 65816 Emulator
 \ Scot W. Stevenson <scot.stevenson@gmail.com>
-\ This version: 19. Oct 2015
+\ This version: 24. Oct 2015
 
 \ This file must be loaded before io.fs
 

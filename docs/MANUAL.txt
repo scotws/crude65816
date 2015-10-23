@@ -1,7 +1,7 @@
 Manual for A Crude 65816 Emulator 
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 09. Jan 2015
-This version: 19. Oct 2015
+This version: 25. Oct 2015
 
 
 THIS DOCUMENT IS CURRENTLY MERELY A COLLECTION OF NOTES. WHEN IN DOUBT, USE THE
@@ -61,11 +61,11 @@ By default, Gforth reserves measly 256k for the dictionary, which is not enough
 when you are going to simulate a 16M large memory space. We need to call Gforth
 with at least 
 
-        gforth -m 64M 
+        gforth -m 32M 
 
 You can also start the emulator directly from the command line with
 
-        gforth -m 64M crude65816.fs
+        gforth -m 32M crude65816.fs
 
 You might want to put this in a shell script. 
 

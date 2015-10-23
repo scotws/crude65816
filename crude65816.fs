@@ -72,9 +72,9 @@ defer mask.a  defer mask.xy
 
 \ Format numbers to two, four, and six places, assumes HEX
 \ TODO find diffent names for these words
-: .mask8 ( n -- )  s>d <# # # #> type space ; 
-: .mask16 ( n -- )  s>d <# # # # # #> type space ; 
-: .mask24 ( n -- )  s>d <# # # # # # # #> type space ; 
+: .byte ( n -- )  s>d <# # # #> type space ; 
+: .word ( n -- )  s>d <# # # # # #> type space ; 
+: .longword ( n -- )  s>d <# # # # # # # #> type space ; 
 
 \ return least, most significant byte of 16-bit number
 : lsb ( u -- u8 )  mask8 ;
@@ -546,7 +546,7 @@ cr .( Setting up interrupt routines ...)
 \ TODO see if we need to clear the PBR in emulated mode as well 
 defer brk.a 
 : brk-core ( -- ) 
-   ." *** BRK encountered at " PC24 .mask24 ." ***" 
+   ." *** BRK encountered at " PC24 .longword ." ***" 
    d-flag clear   PC+1  PC @  push16  P> push8  i-flag set  
    brk-v fetch/wrap16  PC ! ; 
 
@@ -556,7 +556,7 @@ defer brk.a
 \ COP is used as in textbook
 defer cop.a
 : cop.e ( -- ) 
-   ." *** COP encountered at " PC24 .mask24 ." ***" 
+   ." *** COP encountered at " PC24 .longword ." ***" 
    PC @  2 + mask16 push16
    P> push8
    i-flag set
@@ -895,17 +895,17 @@ cr .( Creating output functions ...)
 
    \ --- Print data ---
 
-   PC @  .mask16  PBR @ .mask8   
+   PC @  .word  PBR @ .byte
    
    \ print BA or C
    a16flag clear?  e-flag set?  or  if  
-      B .mask8  A .mask8 else
-      C @ .mask16 then
+      B .byte  A .byte else
+      C @ .word then
 
    \ print X and Y
-   Y @  X @   xy16flag clear? if  .mask8 .mask8  else  .mask16 .mask16  then 
+   Y @  X @   xy16flag clear? if  .byte .byte  else  .word .word  then 
    
-   S @ .mask16   D @ .mask16   DBR @ .mask8
+   S @ .word   D @ .word   DBR @ .byte
    P> .8bits  space 
    e-flag set? if ." emulated" else ." native" then cr ; 
 
@@ -917,11 +917,11 @@ cr .( Creating output functions ...)
    over + swap
 
    dup 10 mod  0<> if  
-      dup 0fffff0 and cr .mask24 space
+      dup 0fffff0 and cr .longword space
       dup 0f and  3 * spaces  then
    ?do 
-      i  10 mod 0= if  cr i mask24  .mask24 space then 
-      i fetch8 .mask8 
+      i  10 mod 0= if  cr i mask24  .longword space then 
+      i fetch8 .byte 
    loop cr ; 
 
 \ Print stack if we are in emulated mode
@@ -932,7 +932,7 @@ cr .( Creating output functions ...)
       else
          stackempty? if  
             ." Stack is empty (S is 01FF in emulated mode)" cr  else
-         0200  S @ 1+  ?do  i dup .  space  fetch8 .mask8  cr  loop 
+         0200  S @ 1+  ?do  i dup .  space  fetch8 .byte  cr  loop 
       then then ; 
 
 \ Print Direct Page contents. We use D as a base regardless of which mode we are
@@ -941,8 +941,8 @@ cr .( Creating output functions ...)
 \ TODO make this a special case of 65dump 
 : .direct ( -- ) 
    cr ."        0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F"
-   100 0 ?do  cr  D @  i +  .mask16 ."  " 
-      10 0 ?do   D @  i +  j +  fetch8 .mask8 loop 
+   100 0 ?do  cr  D @  i +  .word ."  " 
+      10 0 ?do   D @  i +  j +  fetch8 .byte loop 
    10 +loop cr ; 
 
 
@@ -1201,7 +1201,7 @@ cr .( Defining opcode routines themselves ... )
 : opc-40 ( rti )   rti.a ; 
 : opc-41 ( eor.dxi )  mode.dxi eor-core ;  
 : opc-42 ( wdm ) cr cr ." WARNING: WDM executed at " 
-   PBR @ .mask8  PC @ .mask16  PC+1 ; 
+   PBR @ .byte  PC @ .word  PC+1 ; 
 : opc-43 ( eor.s )  mode.s eor-core ; \ New S opcode
 : opc-44 ( mvp )  mvp-core ;  
 : opc-45 ( eor.d )  mode.d eor-core ; 
@@ -1343,7 +1343,7 @@ cr .( Defining opcode routines themselves ... )
 : opc-C9 ( cmp.# )  C> mode.imm cmp-core PC+a ; 
 : opc-CA ( dex )  X @  1- mask.xy  X !  check-NZ.x ;
 : opc-CB ( wai )  cr cr 
-   ." *** WAI encountered at " PC24 .mask24 
+   ." *** WAI encountered at " PC24 .longword 
    ." Resume with STEP, RUN or interrupt ***" cr
    .state quit ; 
 : opc-CC ( cpy )  Y @  mode.abs.DBR cpxy-core ; 
@@ -1362,7 +1362,7 @@ cr .( Defining opcode routines themselves ... )
 : opc-D9 ( cmp.y )  C> mode.y cmp-core ; 
 : opc-DA ( phx )  X @  push.xy ;
 : opc-DB ( stp )  cr cr 
-   ." *** STP encountered at " PC24 .mask24 ." Resume with STEP or RUN ***" cr
+   ." *** STP encountered at " PC24 .longword ." Resume with STEP or RUN ***" cr
    .state quit ; 
 : opc-DC ( jmp.il )  mode.il 24>PC24! ; 
 : opc-DD ( cmp.x )  C> mode.x cmp-core ;  

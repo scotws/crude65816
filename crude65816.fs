@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 09. Jan 2015
-\ This version: 19. Oct 2015
+\ This version: 24. Oct 2015
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version ALPHA  19. Oct 2015)  
+cr .( Version ALPHA  24. Oct 2015)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -27,9 +27,7 @@ cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 cr .( Defining general stuff ...)
 hex
 
-\ TODO make sure we need anything execpt 16M 
-400 constant 1k       1k 8 * constant 8k      8k 2* constant 16k
-16k 8 * constant 64k  64k 100 * constant 16M
+1000000 constant 16M 
 
 
 \ ---- HARDWARE: CPU ----

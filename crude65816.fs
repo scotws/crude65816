@@ -65,7 +65,6 @@ defer mask.a  defer mask.xy
 : mask8 ( u -- u8 ) 0ff and ; 
 : mask16 ( u -- u16 ) 0ffff and ; 
 : mask24 ( u -- u24 ) 0ffffff and ; 
-: mask.B ( u -- u16 ) 0ff00 and ; \ used to protect B  TODO really need this?
 
 \ Print byte as bits, does not add space, returns as HEX
 : .8bits ( u -- ) 
@@ -1384,7 +1383,7 @@ cr .( Defining opcode routines themselves ... )
 \ N and Z depend only on value in (new) A, regardless if the register is in 8 or 
 \ 16 bit mode # TODO rewrite with C> etc
 : opc-EB ( xba )  
-   C @ dup  mask8  8 lshift  swap mask.B  8 rshift  dup check-NZ.8  or  C ! ; 
+   C @ dup  mask8  8 lshift  swap 0ff00 and  8 rshift  dup check-NZ.8  or  C ! ; 
 
 : opc-EC ( cpx )  X @ mode.abs.DBR cpxy-core ; 
 : opc-ED ( sbc )  mode.abs.DBR sbc-core ;  

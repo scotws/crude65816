@@ -1,12 +1,14 @@
 TODO for A Crude 65816 Emulator
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 27. May 2015
-This version: 19. Oct 2015
+This version: 23. Oct 2015
 
 
 IMMEDIATELY 
 
-- Begin extensive testing, create testing suite for native mode
+- Begin extensive testing
+        - Test individual themes
+        - Create testing suite for native mode
 
 SHORT TERM
 

@@ -71,7 +71,6 @@ defer mask.a  defer mask.xy
    2 base !  s>d <# # # # # # # # # #> type  hex ; 
 
 \ Format numbers to two, four, and six places, assumes HEX
-\ TODO find diffent names for these words
 : .byte ( n -- )  s>d <# # # #> type space ; 
 : .word ( n -- )  s>d <# # # # # #> type space ; 
 : .longword ( n -- )  s>d <# # # # # # # #> type space ; 
@@ -98,12 +97,12 @@ defer mask.a  defer mask.xy
 : A>C! ( u8 -- )  B  8 lshift or  mask16  C ! ;
 
 \ Take values from TOS and store them in the Accumulator depending on their size
-defer >C  \ TODO see if this should be >A|C
+defer >C 
 : 8>C! ( u8 -- )  mask8  B  8 lshift  or   C ! ; 
 : 16>C! ( u16 -- ) mask16  C ! ; 
 
 \ Takes C and puts it TOS depending on the size of the accumulator
-defer C>  \ TODO see if this should be A|C>
+defer C>
 : C>8 ( -- u8 ) A ; 
 : C>16 ( -- u16 ) C @  mask16 ; \ MASK is paranoid 
 
@@ -122,10 +121,8 @@ defer C>  \ TODO see if this should be A|C>
    rot bank ;          ( lsb msb bank) 
 
 \ Program Counter. Automatically wraps at 16 bit
-\ TODO see if we need PC+3
-: PC+u ( u -- ) ( -- )  
-   create ,  does> @  PC @  +  mask16  PC ! ;
-1 PC+u PC+1   2 PC+u PC+2   3 PC+u PC+3
+: PC+1  ( -- )  PC @  1+ mask16  PC ! ; 
+: PC+2  ( -- )  PC @  2 + mask16  PC ! ; 
 
 \ Make 24 bit value the new 24 bit address
 : 24>PC24!  ( 65addr24 -- )  24>lsb/msb/bank  PBR !  lsb/msb>16  PC ! ; 
@@ -234,18 +231,12 @@ defer store.a    defer store.xy
    special-store?  dup 0= if     ( u8 65addr24 0|xt)
       drop  memory +  c!  else   \ C! means that no MASK is required
       nip execute  then ; 
-: store16 ( u16 65addr24 -- ) \ store LSB first
+: store16 ( u16 65addr24 -- )  
    2dup swap lsb swap store8  swap msb swap 1+ store8 ; 
-: store24 ( u24 65addr24 -- )
-\ TODO This is really, really horrible, rewrite 
-\ TODO Even better, see if we even need this at all
-   >r               ( u24  R: 65addr ) 
-   24>bank/msb/lsb  ( bank msb lsb  R: 65addr)
-   r> dup 1+ >r     ( bank msb lsb 65addr  R: 65addr+1)
-   store8           ( bank msb  R: 65addr+1) 
-   r> dup 1+ >r     ( bank msb 65addr+1  R: 65addr+2)
-   store8           ( bank  R: 65addr+2)
-   r> store8 ; 
+: store24 ( u24 65addr24 -- )  \ This is only used for debugging
+   dup 3 + swap >r >r          \ Create and save loop parameters
+   24>bank/msb/lsb
+   r> r> do i store8 loop ; 
 
 \ STORE/WRAP ("store with wrap") stores a byte or a double byte on
 \ a byte-for-byte basis for cases when a bank-boundry can be crossed. These are
@@ -348,7 +339,6 @@ defer check-N.a  defer check-N.x  defer check-N.y
 \ Zero Flag
 defer check-Z.a
 : check-Z ( n -- )  test&set-z ; 
-
 : check-Z.a8 ( -- )  A check-Z ;
 : check-Z.a16 ( -- )  C @  check-Z ; 
 : check-Z.x ( -- )  X @  check-Z ;
@@ -361,12 +351,9 @@ defer check-NZ.TOS   \ Used for LSR and other instructions that don't work on C
 : check-NZ.a ( -- )  check-N.a  check-Z.a ; 
 : check-NZ.x ( -- )  check-N.x  check-Z.x ; 
 : check-NZ.y ( -- )  check-N.y  check-Z.y ; 
-: check-NZC.a ( -- )  check-N.a  check-Z.a  check-C.a ; 
-: check-NZC.x ( -- )  check-N.x  check-Z.x  check-C.x ; 
-: check-NZC.y ( -- )  check-N.y  check-Z.y  check-C.y ; 
  
 \ Routines to find out if addition produced a carry flag
-defer carry?.a
+defer carry?
 : carry?.8 ( u -- f )  100 and 0<> ; 
 : carry?.16 ( u -- f ) 10000 and 0<> ; 
 
@@ -468,9 +455,7 @@ cr .( Setting up BCD routines ...)
 
 \ --- COMPARE INSTRUCTIONS ---
 
-\ See http://www.6502.org/tutorials/compare_beyond.html for discussion TODO see
-\ if we need these or if we can use the CHECK-XX routines directly for the CMP
-\ instructions
+\ See http://www.6502.org/tutorials/compare_beyond.html for discussion 
 defer cmp.a  defer cmp.xy
 : cmp8  ( AXY u8 -- )  2dup check-C  - check-NZ.8 ; 
 : cmp16  ( CXY u16 -- )  2dup check-C  - check-NZ.16 ; 
@@ -513,7 +498,6 @@ create old-s-opcodes
 
 \ Increase or decrease the stack pointer by one, wrapping to page 01 and bank 00
 \ boundries
-\ TODO consider factoring out masking part here and in S++.n
 : S++/wrap ( -- ) S @  1+ mask8  0100 or  S ! ; \ mask8 includes wrap to bank
 : S--/wrap ( -- ) S @  1- mask8  0100 or  S ! ; \ mask8 includes wrap to bank
 
@@ -591,7 +575,7 @@ variable xy16flag   xy16flag clear
    ['] mask16 is mask.a
    ['] mask-N.16 is mask-N.a
    ['] mask-V.16 is mask-V.a
-   ['] carry?.16 is carry?.a
+   ['] carry?.16 is carry?
    a16flag set ; 
 
 : a:8 ( -- )  
@@ -611,7 +595,7 @@ variable xy16flag   xy16flag clear
    ['] mask8 is mask.a
    ['] mask-N.8 is mask-N.a
    ['] mask-V.8 is mask-V.a
-   ['] carry?.8 is carry?.a
+   ['] carry?.8 is carry?
    a16flag clear ;
 
 \ Switch X and Y 8<->16 bit (p. 51 in Manual) 
@@ -868,33 +852,22 @@ cr .( Defining addressing modes ...)
 cr .( Creating output functions ...) 
 
 \ Print state of machine 
-\ TODO rewrite this once we know what we really want to see
 : .state ( -- )
 
-   \ --- Print status line --- 
-
-   \  ." xxxx xx "
+   \ Print status line 
    cr ."  PC   K "
 
    a16flag clear?  e-flag set?  or  if 
-   \  ." xx xx "
-      ."  B  A " else
-   \  ." xxxx "
-      ."   C  " then 
+      ."  B  A " else  ."   C  " then 
    
    xy16flag clear?  e-flag set?  or  if 
-   \  ." xx xx "
-      ."  X  Y " else
-   \  ." xxxx xxxx "
-      ."   X    Y  " then 
+      ."  X  Y " else  ."   X    Y  " then 
  
    e-flag set? if 
-   \  ." xxxx xxxx xx xxxxxxxx" 
-      ."   S    D   B NV-BDIZC" else
+      ."   S    D   B NV-BDIZC" else  
       ."   S    D   B NVMXDIZC" then cr 
 
-   \ --- Print data ---
-
+   \ Print PC and Program Bank Register
    PC @  .word  PBR @ .byte
    
    \ print BA or C
@@ -905,9 +878,9 @@ cr .( Creating output functions ...)
    \ print X and Y
    Y @  X @   xy16flag clear? if  .byte .byte  else  .word .word  then 
    
-   S @ .word   D @ .word   DBR @ .byte
-   P> .8bits  space 
-   e-flag set? if ." emulated" else ." native" then cr ; 
+   \ print Stack Pointer, Direct Page Register, Status Register
+   S @ .word   D @ .word   DBR @ .byte   P> .8bits  space 
+   e-flag set? if  ." emulated" else  ." native" then cr ; 
 
 
 \ Dump memory with 65816 addresses. Note you can also use the DUMP built-in
@@ -924,6 +897,11 @@ cr .( Creating output functions ...)
       i fetch8 .byte 
    loop cr ; 
 
+\ Print Direct Page contents. We use D as a base regardless of which mode we are
+\ in; see MODE.D for discussion of what happens with D in emulation mode.
+\ Assumes HEX.
+: .direct ( -- )  D @  100  65dump ; 
+
 \ Print stack if we are in emulated mode
 : stackempty? ( -- f )  S @  01ff  = ; 
 : .stack ( -- )
@@ -935,16 +913,6 @@ cr .( Creating output functions ...)
          0200  S @ 1+  ?do  i dup .  space  fetch8 .byte  cr  loop 
       then then ; 
 
-\ Print Direct Page contents. We use D as a base regardless of which mode we are
-\ in; see MODE.D for discussion of what happens with D in emulation mode.
-\ Assumes HEX.
-\ TODO make this a special case of 65dump 
-: .direct ( -- ) 
-   cr ."        0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F"
-   100 0 ?do  cr  D @  i +  .word ."  " 
-      10 0 ?do   D @  i +  j +  fetch8 .byte loop 
-   10 +loop cr ; 
-
 
 \ ---- BLOCK MOVE INSTRUCTIONS ----
 
@@ -955,7 +923,8 @@ cr .( Creating output functions ...)
 \ wrapping, and fall back on slower loop constructs otherwise. Remember
 \ C is number of bytes to be moved minus one, and the first operand is the
 \ destinantion bank byte, not the source. The return values are faked. 
-\ TODO Actually measure time difference between MOVE and LOOP variants
+\ TODO Since we're only moving 64k max and this is a rare instruction, 
+\      get rid of two-mode system and just do everything the slow way
 \ TODO Factor words once we know they are working 
 
 : move-without-wrap? ( -- f ) 
@@ -968,29 +937,21 @@ cr .( Creating output functions ...)
      swap Y @  swap mem16/bank>24  memory +  \ full destination address
      C @  1+  move ; 
 
-\ MVN starts with the first byte and works forward to avoid overwriting data
-: mvn-slow ( -- ) 
-   C> 1+ 0 ?do
+\ Move core routine, used by both MVN and MVP
+: move-core ( dbb sbb -- ) 
       X @  i +  mask16     ( dbb sbb s16 ) \ get source addres w/o bank byte
       over mem16/bank>24   ( dbb sbb src ) \ calculate new every time
-      fetch8 rot               ( sbb u8 dbb ) 
+      fetch8 rot           ( sbb u8 dbb ) 
       Y @  i +  mask16     ( sbb u8 dbb d16 )
       over mem16/bank>24   ( sbb u8 dbb dest ) 
       swap -rot            ( sbb dbb u8 dest ) 
-      store8 swap              ( dbb sbb ) 
-   loop ; 
+      store8 swap ;        ( dbb sbb )
+
+\ MVN starts with the first byte and works forward to avoid overwriting data
+: mvn-slow ( dbb sbb -- )  C> 1+ 0 ?do  move-core  loop ; 
 
 \ MVP starts with the last byte and works backwards to avoid overwriting data
-: mvp-slow ( -- )
-   0 C> 1+ ?do
-      X @  i +  mask16     ( dbb sbb s16 ) \ get source addres w/o bank byte
-      over mem16/bank>24   ( dbb sbb src ) \ calculate new every time
-      fetch8 rot               ( sbb u8 dbb ) 
-      Y @  i +  mask16     ( sbb u8 dbb d16 )
-      over mem16/bank>24   ( sbb u8 dbb dest ) 
-      swap -rot            ( sbb dbb u8 dest ) 
-      store8 swap              ( dbb sbb ) 
-   -1 +loop ; 
+: mvp-slow ( dbb sbb -- )  0 C> 1+ ?do move-core  -1 +loop ; 
 
 : mvn-core ( -- ) 
    fetchPC8  dup >r   \ destination bank byte (!) 
@@ -1073,7 +1034,7 @@ cr .( Defining core routines for opcodes )
 : adc-sbc-core ( u -- ) 
    dup >r      \ save operand for Overflow calculation
    C>  dup >r  \ save accumulator for Overflow calculation 
-   +  c-flag @ mask-c +  dup >C  carry?.a test&set-c  check-NZ.a
+   +  c-flag @ mask-c +  dup >C  carry? test&set-c  check-NZ.a
    r> C> or  r> C> or  and  mask-N.a  0<> v-flag ! ;  \ calculate Overflow
 
 \ Common routine for 8- and 16-bit binary addition 
@@ -1362,7 +1323,8 @@ cr .( Defining opcode routines themselves ... )
 : opc-D9 ( cmp.y )  C> mode.y cmp-core ; 
 : opc-DA ( phx )  X @  push.xy ;
 : opc-DB ( stp )  cr cr 
-   ." *** STP encountered at " PC24 .longword ." Resume with STEP or RUN ***" cr
+   ." *** STP encountered at " PC24 .longword 
+   ." Resume with STEP or RUN ***" cr 
    .state quit ; 
 : opc-DC ( jmp.il )  mode.il 24>PC24! ; 
 : opc-DD ( cmp.x )  C> mode.x cmp-core ;  
@@ -1379,12 +1341,8 @@ cr .( Defining opcode routines themselves ... )
 : opc-E8 ( inx )  X @  1+  mask.xy  X !  check-NZ.x ;
 : opc-E9 ( sbc.# )  mode.imm sbc-core PC+a ; 
 : opc-EA ( nop ) ;
-
-\ N and Z depend only on value in (new) A, regardless if the register is in 8 or 
-\ 16 bit mode # TODO rewrite with C> etc
-: opc-EB ( xba )  
-   C @ dup  mask8  8 lshift  swap 0ff00 and  8 rshift  dup check-NZ.8  or  C ! ; 
-
+: opc-EB ( xba )  \ N and Z depend only on value in (new) A 
+   C @  dup mask8  8 lshift  swap 0ff00 and  8 rshift  dup check-NZ.8  or  C ! ; 
 : opc-EC ( cpx )  X @ mode.abs.DBR cpxy-core ; 
 : opc-ED ( sbc )  mode.abs.DBR sbc-core ;  
 : opc-EE ( inc )  mode.abs.DBR inc.mem ; 

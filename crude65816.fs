@@ -293,65 +293,41 @@ variable e-flag
 : test&set-v ( u -- )  0<> v-flag ! ; 
 : test&set-z ( u -- )  0= z-flag ! ; 
 
-defer mask-N.a
-: mask-N.8  ( u8 -- u8 ) 80 and ; 
-: mask-N.16 ( u16 -- u16 ) 8000 and ; 
+defer mask-n.a   defer mask-n.xy
+: mask-n.8  ( u8 -- u8 ) 80 and ; 
+: mask-n.16 ( u16 -- u16 ) 8000 and ; 
 
-defer mask-V.a 
-: mask-V.8 ( u8 -- u8 ) 40 and ; 
-: mask-V.16 ( u16 -- u16 ) 4000 and ; 
+defer mask-v.a 
+: mask-v.8 ( u8 -- u8 ) 40 and ; 
+: mask-v.16 ( u16 -- u16 ) 4000 and ; 
 
 : mask-c ( u -- u ) 1 and ; 
 
 \ ---- TEST AND SET FLAGS ----
+\ The basic, unspecific routines consume TOS, the register functions do not
 
-\ The basic, unspecific routines consume TOS, the derived functions do not
-\ TODO THIS IS A MESS, REWRITE
-\ TODO Rewrite and combine these once we know what we are doing 
-\ TODO Rewrite these so they all consume or don't consume TOS
-
-\ Carry Flag
-defer check-C.a  defer check-C.x  defer check-C.y
-: check-C  ( n n -- )  < if  c-flag clear  else  c-flag set  then ; 
-
-\ MASKs are paranoid 
-\ TODO Replace with versions that use C>
-: check-C.a8  ( n8 -- )  A  check-C ;
-: check-C.a16  ( n16 -- )  C @  mask16 check-C ; 
-: check-C.x8  ( n8 -- )  X @  mask8 check-C ; 
-: check-C.x16  ( n16 -- )  X @  mask16 check-C ; 
-: check-C.y8  ( n8 -- )  Y @  mask8 check-C ; 
-: check-C.y16  ( n16 -- )  Y @  mask16 check-C ; 
+\ Carry Flag 
+: check-c  ( n n -- )  < invert  c-flag ! ; 
 
 \ Negative Flag
-defer check-N.a  defer check-N.x  defer check-N.y
-: check-N8 ( n -- )  mask-N.8  test&set-n ;
-: check-N16 ( n -- )  mask-N.16 test&set-n ;
+: check-n8 ( n -- )  mask-n.8  test&set-n ;
+: check-n16 ( n -- )  mask-n.16 test&set-n ;
+: check-n.a  ( -- )  C> mask-n.a test&set-n ; 
 
-\ MASKs are paranoid
-: check-N.a8 ( -- )  A check-N8 ;
-: check-N.a16 ( -- )  C @ check-N16 ; 
-: check-N.x8 ( -- )  X @  mask8 check-N8 ; 
-: check-N.x16 ( -- )  X @  mask16 check-N16 ; 
-: check-N.y8 ( -- )  Y @  mask8 check-N8 ; 
-: check-N.y16 ( -- )  Y @ mask16 check-N16 ;   
-
-\ Zero Flag
-defer check-Z.a
-: check-Z ( n -- )  test&set-z ; 
-: check-Z.a8 ( -- )  A check-Z ;
-: check-Z.a16 ( -- )  C @  check-Z ; 
-: check-Z.x ( -- )  X @  check-Z ;
-: check-Z.y ( -- )  Y @  check-Z ; 
+\ Zero Flag. We don't need a separate test routine for X and Y because they are
+\ always tested together with the Negative flag
+: check-z.a ( -- )  C> test&set-z ; 
 
 \ Common combinations
-defer check-NZ.TOS   \ Used for LSR and other instructions that don't work on C 
-: check-NZ.8 ( n8 -- )  dup check-N8 check-Z ; 
-: check-NZ.16 ( n16 -- )  dup check-N16 check-Z ; 
-: check-NZ.a ( -- )  check-N.a  check-Z.a ; 
-: check-NZ.x ( -- )  check-N.x  check-Z.x ; 
-: check-NZ.y ( -- )  check-N.y  check-Z.y ; 
+: check-nz.a ( -- )  check-n.a  check-z.a ; 
+: check-nz.xy  ( X|Y -- )  dup  mask-n.xy test&set-n  test&set-z ;
+: check-nz.x ( -- )  X @  check-nz.xy ; 
+: check-nz.y ( -- )  Y @  check-nz.xy ; 
  
+defer check-nz.TOS   \ Used for LSR and other instructions that don't work on C 
+: check-nz.8 ( n8 -- )  dup check-n8 test&set-z ; 
+: check-nz.16 ( n16 -- )  dup check-n16 test&set-z ; 
+
 \ Routines to find out if addition produced a carry flag
 defer carry?
 : carry?.8 ( u -- f )  100 and 0<> ; 
@@ -457,8 +433,8 @@ cr .( Setting up BCD routines ...)
 
 \ See http://www.6502.org/tutorials/compare_beyond.html for discussion 
 defer cmp.a  defer cmp.xy
-: cmp8  ( AXY u8 -- )  2dup check-C  - check-NZ.8 ; 
-: cmp16  ( CXY u16 -- )  2dup check-C  - check-NZ.16 ; 
+: cmp8  ( AXY u8 -- )  2dup check-c  - check-nz.8 ; 
+: cmp16  ( CXY u16 -- )  2dup check-c  - check-nz.16 ; 
 
 \ --- BRANCHING --- 
 cr .( Setting up branching ...) 
@@ -566,15 +542,13 @@ variable xy16flag   xy16flag clear
    ['] 16>C! is >C 
    ['] C>16 is C>
    ['] PC+2 is PC+a
-   ['] check-N.a16 is check-N.a
-   ['] check-Z.a16 is check-Z.a
-   ['] check-NZ.8 is check-NZ.TOS
+   ['] check-nz.8 is check-nz.TOS
    ['] cmp16 is cmp.a
    ['] push16 is push.a 
    ['] pull16 is pull.a
    ['] mask16 is mask.a
-   ['] mask-N.16 is mask-N.a
-   ['] mask-V.16 is mask-V.a
+   ['] mask-n.16 is mask-n.a
+   ['] mask-v.16 is mask-v.a
    ['] carry?.16 is carry?
    a16flag set ; 
 
@@ -586,15 +560,13 @@ variable xy16flag   xy16flag clear
    ['] 8>C! is >C 
    ['] C>8 is C>
    ['] PC+1 is PC+a
-   ['] check-N.a8 is check-N.a
-   ['] check-Z.a8 is check-Z.a
-   ['] check-NZ.8 is check-NZ.TOS
+   ['] check-nz.8 is check-nz.TOS
    ['] cmp8 is cmp.a
    ['] push8 is push.a 
    ['] pull8 is pull.a
    ['] mask8 is mask.a
-   ['] mask-N.8 is mask-N.a
-   ['] mask-V.8 is mask-V.a
+   ['] mask-n.8 is mask-n.a
+   ['] mask-v.8 is mask-v.a
    ['] carry?.8 is carry?
    a16flag clear ;
 
@@ -605,9 +577,8 @@ variable xy16flag   xy16flag clear
    ['] store16 is store.xy
    ['] store/wrap16 is store/wrap.xy
    ['] mask16 is mask.xy
+   ['] mask-n.16 is mask-n.xy
    ['] PC+2 is PC+xy
-   ['] check-N.x16 is check-N.x
-   ['] check-N.y16 is check-N.y
    ['] cmp16 is cmp.xy
    ['] push16 is push.xy 
    ['] pull16 is pull.xy
@@ -620,9 +591,8 @@ variable xy16flag   xy16flag clear
    ['] store8 is store.xy
    ['] store/wrap8 is store/wrap.xy
    ['] mask8 is mask.xy
+   ['] mask-n.8 is mask-n.xy
    ['] PC+1 is PC+xy
-   ['] check-N.x8 is check-N.x
-   ['] check-N.y8 is check-N.y
    ['] cmp8 is cmp.xy
    ['] push8 is push.xy 
    ['] pull8 is pull.xy
@@ -971,61 +941,61 @@ cr .( Defining core routines for opcodes )
 \ TODO Rewrite/optimize/refract these
 
 \ These all work in both 8- and 16-bit modes
-: and-core ( 65addr -- )  fetch/wrap.a mask.a C> and >C check-NZ.a ;
-: eor-core ( 65addr -- )  fetch/wrap.a mask.a C> xor >C check-NZ.a ; 
-: ora-core ( 65addr -- )  fetch/wrap.a mask.a C> or >C check-NZ.a ; 
+: and-core ( 65addr -- )  fetch/wrap.a mask.a C> and >C check-nz.a ;
+: eor-core ( 65addr -- )  fetch/wrap.a mask.a C> xor >C check-nz.a ; 
+: ora-core ( 65addr -- )  fetch/wrap.a mask.a C> or >C check-nz.a ; 
 
 \ ASL-CORE is used for all, ASL-MEM for memory shifts 
-: asl-core ( u -- u )  dup mask-N.a test&set-c 1 lshift ; 
+: asl-core ( u -- u )  dup mask-n.a test&set-c 1 lshift ; 
 : asl-mem ( addr -- )  
-   dup fetch/wrap.a asl-core dup check-NZ.TOS swap store/wrap.a ; 
+   dup fetch/wrap.a asl-core dup check-nz.TOS swap store/wrap.a ; 
 
 \ LSR-CORE is used for all, LSR-MEM for memory shifts
 : lsr-core ( u -- u )  dup mask-c test&set-c  1 rshift ; 
 : lsr-mem ( addr -- )  
-   dup fetch/wrap.a lsr-core dup check-NZ.TOS swap store/wrap.a ; 
+   dup fetch/wrap.a lsr-core dup check-nz.TOS swap store/wrap.a ; 
 
 \ ROL-CORE is used for all, ROL-MEM for memory shifts
 : rol-core ( u -- u )  
-   c-flag @  mask-c swap  dup mask-N.a test&set-c  1 lshift or ;
+   c-flag @  mask-c swap  dup mask-n.a test&set-c  1 lshift or ;
 : rol-mem ( addr -- )  
-   dup fetch/wrap.a rol-core dup check-NZ.TOS swap store/wrap.a ; 
+   dup fetch/wrap.a rol-core dup check-nz.TOS swap store/wrap.a ; 
 
 \ ROR-CORE is used for all, ROR-MEM for memory shifts
 : ror-core ( u -- u )  
-   c-flag @ mask-N.a swap  dup mask-c test&set-c  1 rshift or ; 
+   c-flag @ mask-n.a swap  dup mask-c test&set-c  1 rshift or ; 
 : ror-mem ( addr -- )  
-   dup fetch/wrap.a ror-core dup check-NZ.TOS swap store/wrap.a ; 
+   dup fetch/wrap.a ror-core dup check-nz.TOS swap store/wrap.a ; 
 
 : bit-core ( 65addr -- ) fetch/wrap.a 
-   dup mask-N.a test&set-n  dup mask-V.a test&set-v  C> and  check-Z ;  
+   dup mask-n.a test&set-n  dup mask-v.a test&set-v  C> and  test&set-z ;  
 
 : trb-core ( 65addr -- )  
    dup fetch/wrap.a 
-   dup C> and check-Z
+   dup C> and  test&set-z
    C>  true mask.a xor  and  swap store/wrap.a ; 
 
 : tsb-core ( 65addr -- )
    dup fetch/wrap.a 
-   dup C> and check-Z
+   dup C> and  test&set-z
    C> or swap store/wrap.a ; 
 
 \ INC and DEC for the Accumulator
-: inc.accu ( -- ) C> 1+ mask.a >C check-NZ.a ; 
-: dec.accu ( -- ) C> 1- mask.a >C check-NZ.a ; 
+: inc.accu ( -- ) C> 1+ mask.a >C check-nz.a ; 
+: dec.accu ( -- ) C> 1- mask.a >C check-nz.a ; 
 
 \ INC and DEC for memory
 : inc.mem  ( 65addr -- )  
-   dup fetch/wrap.a 1+ mask.a dup check-NZ.TOS swap store/wrap.a ; 
+   dup fetch/wrap.a 1+ mask.a dup check-nz.TOS swap store/wrap.a ; 
 : dec.mem  ( 65addr -- )  
-   dup fetch/wrap.a 1- mask.a dup check-NZ.TOS swap store/wrap.a ; 
+   dup fetch/wrap.a 1- mask.a dup check-nz.TOS swap store/wrap.a ; 
 
 : cmp-core ( u 65addr -- )  fetch/wrap.a cmp.a ; 
 : cpxy-core ( u 65addr -- )  fetch/wrap.xy cmp.xy ; 
 
-: lda-core ( 65addr -- )  fetch/wrap.a  >C  check-NZ.a ;
-: ldx-core ( 65addr -- )  fetch/wrap.xy  X !  check-NZ.x ;
-: ldy-core ( 65addr -- )  fetch/wrap.xy  Y !  check-NZ.y ;
+: lda-core ( 65addr -- )  fetch/wrap.a  >C  check-nz.a ;
+: ldx-core ( 65addr -- )  fetch/wrap.xy  X !  check-nz.x ;
+: ldy-core ( 65addr -- )  fetch/wrap.xy  Y !  check-nz.y ;
 
 
 \ -- Addition routines -- 
@@ -1034,8 +1004,8 @@ cr .( Defining core routines for opcodes )
 : adc-sbc-core ( u -- ) 
    dup >r      \ save operand for Overflow calculation
    C>  dup >r  \ save accumulator for Overflow calculation 
-   +  c-flag @ mask-c +  dup >C  carry? test&set-c  check-NZ.a
-   r> C> or  r> C> or  and  mask-N.a  0<> v-flag ! ;  \ calculate Overflow
+   +  c-flag @ mask-c +  dup >C  carry? test&set-c  check-nz.a
+   r> C> or  r> C> or  and  mask-n.a  0<> v-flag ! ;  \ calculate Overflow
 
 \ Common routine for 8- and 16-bit binary addition 
 : adc-bin ( addr -- ) fetch/wrap.a adc-sbc-core ; 
@@ -1101,7 +1071,7 @@ cr .( Defining opcode routines themselves ... )
 : opc-07 ( ora.dil )  mode.dil ora-core ; \ New DP opcode
 : opc-08 ( php )  P> push8 ; 
 : opc-09 ( ora.# )  mode.imm ora-core PC+a ;
-: opc-0A ( asl.a )  C> asl-core >C check-NZ.a ;  
+: opc-0A ( asl.a )  C> asl-core >C check-nz.a ;  
 : opc-0B ( phd )  D @  mask16 push16 ;
 : opc-0C ( tsb )   mode.abs.DBR tsb-core ; 
 : opc-0D ( ora )  mode.abs.DBR ora-core ; 
@@ -1137,8 +1107,8 @@ cr .( Defining opcode routines themselves ... )
 : opc-27 ( and.dil )  mode.dil and-core ;  \ New DP opcode 
 : opc-28 ( plp )  pull8 >P ; 
 : opc-29 ( and.# )  mode.imm and-core PC+a ; 
-: opc-2A ( rol.a )  C> rol-core >C check-NZ.a ;  
-: opc-2B ( pld )  pull16 dup check-Z dup check-N16  D ! ;
+: opc-2A ( rol.a )  C> rol-core >C check-nz.a ;  
+: opc-2B ( pld )  pull16 dup test&set-z dup check-n16  D ! ;
 : opc-2C ( bit )  mode.abs.DBR bit-core ;  
 : opc-2D ( and )  mode.abs.DBR and-core ; 
 : opc-2E ( rol )  mode.abs.DBR rol-mem ; 
@@ -1154,7 +1124,7 @@ cr .( Defining opcode routines themselves ... )
 : opc-38 ( sec )  c-flag set ;  
 : opc-39 ( and.y )  mode.y and-core ; 
 : opc-3A ( dec.a )  dec.accu ;
-: opc-3B ( tsc )  S @  mask16 check-NZ.a ; 
+: opc-3B ( tsc )  S @  mask16 check-nz.a ; 
 : opc-3C ( bit.x )  mode.x bit-core ; 
 : opc-3D ( and.x )   mode.x and-core ; 
 : opc-3E ( rol.x )  mode.x rol-mem ; 
@@ -1170,7 +1140,7 @@ cr .( Defining opcode routines themselves ... )
 : opc-47 ( eor.dil )  mode.dil eor-core ;  \ New DP opcode
 : opc-48 ( pha )  C> push.a ; 
 : opc-49 ( eor.# )  mode.imm eor-core PC+a ;
-: opc-4A ( lsr.a )  C> lsr-core >C check-NZ.a ;  
+: opc-4A ( lsr.a )  C> lsr-core >C check-nz.a ;  
 : opc-4B ( phk )  PBR @  push8 ;
 : opc-4C ( jmp )  fetchPC16  PC ! ;
 : opc-4D ( eor )  mode.abs.DBR eor-core ; 
@@ -1187,7 +1157,7 @@ cr .( Defining opcode routines themselves ... )
 : opc-58 ( cli )  i-flag clear ;  
 : opc-59 ( eor.y )  mode.y eor-core ; 
 : opc-5A ( phy )  Y @ push.xy ; 
-: opc-5B ( tcd )  C @  mask16 dup check-NZ.a  D ! ;
+: opc-5B ( tcd )  C @  mask16 dup check-nz.a  D ! ;
 : opc-5C ( jmp.l )  fetchPC24 24>PC24! ; 
 : opc-5D ( eor.x )  mode.x eor-core ; 
 : opc-5E ( lsr.x )  mode.x lsr-mem ; 
@@ -1200,9 +1170,9 @@ cr .( Defining opcode routines themselves ... )
 : opc-65 ( adc.d )  mode.d adc-core ;  
 : opc-66 ( ror.d )  mode.d ror-mem ; 
 : opc-67 ( adc.dil )  mode.dil adc-core ; \ New DP opcode 
-: opc-68 ( pla )  pull.a >C check-NZ.a ; 
+: opc-68 ( pla )  pull.a >C check-nz.a ; 
 : opc-69 ( adc.# )  mode.imm adc-core PC+a ; 
-: opc-6A ( ror.a )  C> ror-core >C check-NZ.a ;  
+: opc-6A ( ror.a )  C> ror-core >C check-nz.a ;  
 : opc-6B ( rts.l )  pull24 1+  24>PC24! ; 
 : opc-6C ( jmp.i )  mode.i  PC ! ; 
 : opc-6D ( adc )  mode.abs.DBR adc-core ; 
@@ -1218,8 +1188,8 @@ cr .( Defining opcode routines themselves ... )
 : opc-77 ( adc.dily )  mode.dily adc-core ; \ New DP opcode
 : opc-78 ( sei ) i-flag set ; 
 : opc-79 ( adc.y )  mode.y adc-core ; 
-: opc-7A ( ply )  pull.xy  Y !  check-NZ.y ;
-: opc-7B ( tdc )  D @  mask16 dup check-NZ.a >C ; 
+: opc-7A ( ply )  pull.xy  Y !  check-nz.y ;
+: opc-7B ( tdc )  D @  mask16 dup check-nz.a >C ; 
 : opc-7C ( jmp.xi )  mode.xi  PC ! ; 
 : opc-7D ( adc.x )  mode.x adc-core ; 
 : opc-7E ( ror.x )   mode.x ror-mem ; 
@@ -1232,9 +1202,9 @@ cr .( Defining opcode routines themselves ... )
 : opc-85 ( sta.d )  C> mode.d store/wrap.a ; 
 : opc-86 ( stx.d )  X @  mode.d store/wrap.xy ;  
 : opc-87 ( sta.dil )  C> mode.dil store/wrap.a ; \ New DP opcode
-: opc-88 ( dey )  Y @  1- mask.xy  Y !  check-NZ.y ;
-: opc-89 ( bit.# )  C> mode.imm fetch/wrap.a and check-Z PC+a ; 
-: opc-8A ( txa )  X @  >C check-NZ.a ; 
+: opc-88 ( dey )  Y @  1- mask.xy  Y !  check-nz.y ;
+: opc-89 ( bit.# )  C> mode.imm fetch/wrap.a and test&set-z PC+a ; 
+: opc-8A ( txa )  X @  >C check-nz.a ; 
 : opc-8B ( phb )  DBR @  push8 ; 
 : opc-8C ( sty )  Y @  mode.abs.DBR store/wrap.xy ;
 : opc-8D ( sta )  C>  mode.abs.DBR store/wrap.a ; 
@@ -1248,14 +1218,14 @@ cr .( Defining opcode routines themselves ... )
 : opc-95 ( sta.dx )  C> mode.dx store/wrap.a ; 
 : opc-96 ( stx.dy )  X @  mode.dy store/wrap.xy ; 
 : opc-97 ( sta.dily )  C> mode.dily store/wrap.a ; \ New DP opcode
-: opc-98 ( tya )  Y @  >C check-NZ.a ; 
+: opc-98 ( tya )  Y @  >C check-nz.a ; 
 : opc-99 ( sta.y )  C> mode.y store/wrap.a ; 
 : opc-9A ( txs ) 
    X @  e-flag set? if  \ emulation mode, hi byte paranoided to 01
       mask8  0100 or else
          x-flag set? if mask8 then  \ native mode, 8 bit X; hi byte is 00
       then  S ! ; 
-: opc-9B ( txy )  X @  Y !  check-NZ.y ;
+: opc-9B ( txy )  X @  Y !  check-nz.y ;
 : opc-9C ( stz )  0 mode.abs.DBR store/wrap.a ; 
 : opc-9D ( sta.x ) C> mode.x store/wrap.a ; 
 : opc-9E ( stz.x )  0 mode.x store/wrap.a ;
@@ -1268,10 +1238,10 @@ cr .( Defining opcode routines themselves ... )
 : opc-A5 ( lda.d )  mode.d lda-core ; 
 : opc-A6 ( ldx.d )  mode.d ldx-core ; 
 : opc-A7 ( lda.dil )  mode.dil lda-core ; \ New DP opcode
-: opc-A8 ( tay )  C @  mask.xy  Y !  check-NZ.y ; 
+: opc-A8 ( tay )  C @  mask.xy  Y !  check-nz.y ; 
 : opc-A9 ( lda.# ) mode.imm lda-core PC+a ; 
-: opc-AA ( tax )  C @  mask.xy  X !  check-NZ.x ; 
-: opc-AB ( plb )  pull8 dup check-NZ.8 DBR ! ; 
+: opc-AA ( tax )  C @  mask.xy  X !  check-nz.x ; 
+: opc-AB ( plb )  pull8 dup check-nz.8 DBR ! ; 
 : opc-AC ( ldy )  mode.abs.DBR ldy-core ; 
 : opc-AD ( lda )  mode.abs.DBR lda-core ;
 : opc-AE ( ldx )  mode.abs.DBR ldx-core ; 
@@ -1285,9 +1255,9 @@ cr .( Defining opcode routines themselves ... )
 : opc-B6 ( ldx.dy )  mode.dy ldx-core ; 
 : opc-B7 ( lda.dily )  mode.dily lda-core ; \ New DP opcode
 : opc-B8 ( clv ) v-flag clear ; 
-: opc-B9 ( lda.y )  mode.y fetch/wrap.a check-NZ.a ;
-: opc-BA ( tsx )  S @  xy16flag clear? if mask8 then  X !  check-NZ.x ;  
-: opc-BB ( tyx )  Y @  X !  check-NZ.x ;
+: opc-B9 ( lda.y )  mode.y fetch/wrap.a check-nz.a ;
+: opc-BA ( tsx )  S @  xy16flag clear? if mask8 then  X !  check-nz.x ;  
+: opc-BB ( tyx )  Y @  X !  check-nz.x ;
 : opc-BC ( ldy.x )  mode.x ldy-core ; 
 : opc-BD ( lda.x )  mode.x lda-core ;
 : opc-BE ( ldx.y )  mode.y ldx-core ; 
@@ -1300,9 +1270,9 @@ cr .( Defining opcode routines themselves ... )
 : opc-C5 ( cmp.d )   C> mode.d cmp-core ;
 : opc-C6 ( dec.d )  mode.d dec.mem ;
 : opc-C7 ( cmp.dil )  C> mode.dil cmp-core ; \ New DP opcode 
-: opc-C8 ( iny )   Y @  1+  mask.xy  Y !  check-NZ.y ;
+: opc-C8 ( iny )   Y @  1+  mask.xy  Y !  check-nz.y ;
 : opc-C9 ( cmp.# )  C> mode.imm cmp-core PC+a ; 
-: opc-CA ( dex )  X @  1- mask.xy  X !  check-NZ.x ;
+: opc-CA ( dex )  X @  1- mask.xy  X !  check-nz.x ;
 : opc-CB ( wai )  cr cr 
    ." *** WAI encountered at " PC24 .longword 
    ." Resume with STEP, RUN or interrupt ***" cr
@@ -1338,11 +1308,11 @@ cr .( Defining opcode routines themselves ... )
 : opc-E5 ( sbc.d )  mode.d sbc-core ; 
 : opc-E6 ( inc.d )  mode.d inc.mem ; 
 : opc-E7 ( sbc.dil )  mode.dil sbc-core ;  \ New DP opcode
-: opc-E8 ( inx )  X @  1+  mask.xy  X !  check-NZ.x ;
+: opc-E8 ( inx )  X @  1+  mask.xy  X !  check-nz.x ;
 : opc-E9 ( sbc.# )  mode.imm sbc-core PC+a ; 
 : opc-EA ( nop ) ;
 : opc-EB ( xba )  \ N and Z depend only on value in (new) A 
-   C @  dup mask8  8 lshift  swap 0ff00 and  8 rshift  dup check-NZ.8  or  C ! ; 
+   C @  dup mask8  8 lshift  swap 0ff00 and  8 rshift  dup check-nz.8  or  C ! ; 
 : opc-EC ( cpx )  X @ mode.abs.DBR cpxy-core ; 
 : opc-ED ( sbc )  mode.abs.DBR sbc-core ;  
 : opc-EE ( inc )  mode.abs.DBR inc.mem ; 
@@ -1357,7 +1327,7 @@ cr .( Defining opcode routines themselves ... )
 : opc-F7 ( sbc.dily )  mode.dily sbc-core ;  \ New DP opcode
 : opc-F8 ( sed )  d-flag set ; 
 : opc-F9 ( sbc.y )  mode.y sbc-core ; 
-: opc-FA ( plx )  pull.xy  X !  check-NZ.x ; 
+: opc-FA ( plx )  pull.xy  X !  check-nz.x ; 
 : opc-FB ( xce )  c-flag @  e-flag @   c-flag !  dup e-flag !
    if emulated else native then ; 
 : opc-FC ( jsr.xi )  PC @ 1+  push16 mode.xi  PC ! ;

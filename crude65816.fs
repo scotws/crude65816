@@ -1255,7 +1255,7 @@ cr .( Defining opcode routines themselves ... )
 : opc-B6 ( ldx.dy )  mode.dy ldx-core ; 
 : opc-B7 ( lda.dily )  mode.dily lda-core ; \ New DP opcode
 : opc-B8 ( clv ) v-flag clear ; 
-: opc-B9 ( lda.y )  mode.y fetch/wrap.a check-nz.a ;
+: opc-B9 ( lda.y )  mode.y lda-core ; 
 : opc-BA ( tsx )  S @  xy16flag clear? if mask8 then  X !  check-nz.x ;  
 : opc-BB ( tyx )  Y @  X !  check-nz.x ;
 : opc-BC ( ldy.x )  mode.x ldy-core ; 

@@ -61,11 +61,11 @@ By default, Gforth reserves measly 256k for the dictionary, which is not enough
 when you are going to simulate a 16M large memory space. We need to call Gforth
 with at least 
 
-        gforth -m 32M 
+        gforth -m 18M 
 
 You can also start the emulator directly from the command line with
 
-        gforth -m 32M crude65816.fs
+        gforth -m 18M crude65816.fs
 
 You might want to put this in a shell script. 
 

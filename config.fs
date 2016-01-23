@@ -10,9 +10,10 @@
 \  00e000 s" rom65c02.bin" loadrom  \ test program for the 65c02
 \  00e000 s" rom65816.bin" loadrom  \ operating system, BIOS, *DEFAULT*
 
-\ Test of 8-bit Tali Forth for the 6502 as demo. 
+\ Test of 8-bit Tali Forths for the 6502 as demo. 
 \ Putchr must be f001, getchr f004
-00c000 s" tests/taliforth.bin" loadrom     
+\ 00c000 s" tests/taliforth.bin" loadrom     
+00e000 s" /home/scot/Programming/6502/TaliForth/tink.bin" loadrom     
 
 \ Dummy file to show how ROM data is loaded. Later, these can be program
 \ libraries or other ROM chips.
@@ -29,11 +30,6 @@
 
 \ I/O addresses. These are referenced by io.fs
 
-\ 00ff00 value putchr
-\ 00ff01 value getchr   \ blocks until character received
-
-\ Use these for Tali Forth for the 6502
-00f001 value putchr
-00f004 value getchr   \ blocks until character received
-
+00ff00 value putchr
+00ff01 value getchr   \ blocks until character received
 

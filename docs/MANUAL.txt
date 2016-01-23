@@ -1,7 +1,7 @@
 Manual for A Crude 65816 Emulator 
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 09. Jan 2015
-This version: 25. Oct 2015
+This version: 23. Jan 2016
 
 
 THIS DOCUMENT IS CURRENTLY MERELY A COLLECTION OF NOTES. WHEN IN DOUBT, USE THE
@@ -87,7 +87,7 @@ The current ROM file is a primitive 8-bit test program from the 6502 project.
 
 USING THE PROGRAM
 
-In case you are new to Forth, a remember: it is not a programming language, but
+In case you are new to Forth, know this: it is not a programming language, but
 a system to create specialized languages. As such, with the Crude Emulator you
 have access to all Forth commands such as DUMP, and in single-step mode can
 assign values to, say, the 65816 registers. 

@@ -7,22 +7,14 @@
 \ --- ROMS ---
 
 \ Pick one as the operating system. 00ff00 is putchr, 00ff01 is getchar
-\  00e000 s" rom65c02.bin" loadrom  \ test program for the 65c02
+00e000 s" rom65c02.bin" loadrom  \ test program for the 65c02
 \  00e000 s" rom65816.bin" loadrom  \ operating system, BIOS, *DEFAULT*
-
-\ Test of 8-bit Tali Forths for the 6502 as demo. 
-\ Putchr must be f001, getchr f004
-\ 00c000 s" tests/taliforth.bin" loadrom     
-00e000 s" /home/scot/Programming/6502/TaliForth/tink.bin" loadrom     
 
 \ Dummy file to show how ROM data is loaded. Later, these can be program
 \ libraries or other ROM chips.
 \ 800000 s" data.bin"  loadrom
 
-\ Klaus2m5's 6502 function tests, ALPHA only  TODO remove this 
-\ 00000 s" tests/6502_functional_test.bin" loadrom
-
-\ Test program from assembler, for ALPHA only TODO remove this 
+\ Test program from assembler, for ALPHA only 
 \ 00e000 s" ../tasm65816/rom.bin" loadrom   
 
 

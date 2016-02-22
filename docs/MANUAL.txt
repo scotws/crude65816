@@ -1,7 +1,7 @@
 Manual for A Crude 65816 Emulator 
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 09. Jan 2015
-This version: 23. Jan 2016
+This version: 22. Febn 2016
 
 
 THIS DOCUMENT IS CURRENTLY MERELY A COLLECTION OF NOTES. WHEN IN DOUBT, USE THE
@@ -54,9 +54,6 @@ function is to allow the user to load various binary files to simulate ROMs
 that are loaded at boot. There are various examples included, some of them for
 testing. 
 
-
-
-
 By default, Gforth reserves measly 256k for the dictionary, which is not enough
 when you are going to simulate a 16M large memory space. We need to call Gforth
 with at least 
@@ -80,8 +77,7 @@ locations in the lines designated with LOADROM. This lets you simulate ROM
 data. Note, however, there is no write protection for ROM; the emulator will
 happily let you change these values. 
 
-The current ROM file is a primitive 8-bit test program from the 6502 project. 
-
+The current ROM file is a primitive test program. 
 
 
 
@@ -135,7 +131,6 @@ To walk through the program
 
         step .state
 
-
 To walk through the program, showing the stack with every step (emulation mode only)
 
         step .state .stack
@@ -146,6 +141,7 @@ watch what happens to $000000, for instance:
         step .state  ." DP 00:"  0000 fetch16 . 
 
 Note FETCH does not wrap at the bank boundry, use FETCH/WRAP for this. 
+
 
 
 HALTING THE EMULATION 
@@ -213,11 +209,12 @@ to use the emulator. Where it is most important, both variants are given in the
 source code. 
 
 
+
 NOTES ON INTERNAL CONSTRUCTION FOR FORTHWRIGHTS
 
 The Crude Emulator puts all registers in variables. Experiments during
 development with either A/C or PC as TOS made working with the emulator too
-complicted. Instead, the Forth Data Stack must be empty after every RUN or STEP
+complicated. Instead, the Forth Data Stack must be empty after every RUN or STEP
 command. 
 
 Because of the complicated wrapping rules for the 65816, in this stage of
@@ -242,6 +239,7 @@ mode. See source text for details. This bug will be corrected during ALPHA.
 - The ABORT interrupt does not complete the instruction, throwing away the
 results, and then rerunning it, but instead is run after an instruction. This
 bug has low priority.  
+
 
 
 OTHER NOTES

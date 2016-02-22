@@ -1,7 +1,7 @@
 TODO for A Crude 65816 Emulator
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 27. May 2015
-This version: 23. Oct 2015
+This version: 22. Feb 2016
 
 
 IMMEDIATELY 
@@ -9,6 +9,9 @@ IMMEDIATELY
 - Begin extensive testing
         - Test individual themes
         - Create testing suite for native mode
+- Add Mock Routines for the Mensch Monitor on the W65C265SXB
+- Rewrite rom65816.fs in Typist's Assembler without the BRK
+
 
 SHORT TERM
 
@@ -18,27 +21,22 @@ SHORT TERM
 LONG TERM 
 
 - Consider rewriting Direct Page Modes with a DEFER construct so native mode avoids all the tests; compare stack code
-
 - Add FREEZE/THAW commands to save state of emulator 
 
 
 NICE TO HAVE 
 
 - Add color output to .STATE, .DIRECT, and .STACK on terminals that support it
-
 - Test to see if Forth's MOVE word is really that much faster than a ?DO loop for the MVP and MVN instructions
-
 
 
 QUESTIONS 
 
+- How is the b-flag cleared after BRK in emulation mode?
 - In emulated mode, can REP, PLP, and SEP change the B flag and the unused flag (bit 5) of the status byte (P)?
-
 - If B is clear in emulation mode and we push P to the stack, and then switch to native mode, and then pull P again, will this set XY to 16 bit width (both are bit 3 in the status byte) ? 
-
 - If in native mode the m-flag is set, and we go emulated, will unused bit 5 be set as well?
 
-- How is the b-flag cleared after BRK in emulation mode?
 
 
 END

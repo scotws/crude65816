@@ -1,7 +1,7 @@
 # Manual for A Crude 65816 Emulator 
-Scot W. Stevenson <scot.stevenson@gmail.com>
-First version: 09. Jan 2015
-This version: 24. Feb 2016
+Scot W. Stevenson <scot.stevenson@gmail.com>  
+First version: 09. Jan 2015  
+This version: 24. Feb 2016  
 
 
 > THIS DOCUMENT IS CURRENTLY MERELY A COLLECTION OF NOTES. WHEN IN 
@@ -89,8 +89,8 @@ have access to all Forth commands such as DUMP, and in single-step mode can
 assign values to, say, the 65816 registers. 
 
 The Crude Emulator current supports the following addition commands. Note that
-by Forth convention, a command that starts with a dot (".STATE") prints some
-information to the screen. 
+by Forth convention, a command that starts with a dot (for instance `.state`)
+prints some information to the screen. 
 
         .direct         - print the Direct Page based on D register
         .stack          - print the 65816 stack if in emulated mode
@@ -114,11 +114,15 @@ status of the emulator after every step. Because of the nature of Forth, any
 word defined in the emulator can be used from the command line. To force the
 machine to run at a certain address, save it in the PC: 
 
-```00e000 PC !```
+```
+00e000 PC !
+```
 
 followed by a "run" or "step". The same procedure will let you store a value in, say, the A register:
 
-```61 C !```
+```
+61 C !
+```
 
 (note that the name is not "A") or X, Y, D, S, DBR, and PBR. To change the register sizes, use words
 ```
@@ -268,7 +272,6 @@ List of paper and online literature used, with date of last access where appropr
 
 ### Special topics: 
 
-Interrupt system: http://sbc.bcstechnology.net/65c816interrupts.html
-
+Interrupt system: http://sbc.bcstechnology.net/65c816interrupts.html   
 Wrapping on banks and pages: http://forum.6502.org/viewtopic.php?f=8&t=3459&start=30#p40855
 

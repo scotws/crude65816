@@ -1,0 +1,176 @@
+A Tinkerer's Assembler for the 6502/65c02/65816
+Version BETA  23. February 2016
+Copyright 2015, 2016 Scot W. Stevenson <scot.stevenson@gmail.com>
+This program comes with ABSOLUTELY NO WARRANTY
+Code listing for file mmm.tasm
+Generated on Wed Feb 24 11:33:36 2016
+Target MPU: 65816
+Number of passes executed: 27
+Number of steps executed: 7
+Assembly time: 0.22596 seconds
+Code origin: 00e000
+Bytes of machine code: 294
+
+LISTING:
+       Line Address  Bytes       Instruction
+    1    28 00:e000  4c af e0    jmp alter_memory
+    2    29 00:e003  4c af e0    jmp backspace
+    3    30 00:e006  4c 06 e0    jmp *
+    4    31 00:e009  4c af e0    jmp control_tones
+    5    32 00:e00c  4c af e0    jmp do_low_pwr_pgm
+    6    33 00:e00f  4c af e0    jmp dumpregs
+    7    34 00:e012  4c af e0    jmp dumps28
+    8    35 00:e015  4c af e0    jmp dump_1_line_to_output
+    9    36 00:e018  4c af e0    jmp dump_1_line_to_screen
+   10    37 00:e01b  4c af e0    jmp dump_to_output
+   11    38 00:e01e  4c af e0    jmp dump_to_printer
+   12    39 00:e021  4c af e0    jmp dump_to_screen
+   13    40 00:e024  4c af e0    jmp dump_to_screen_ascii
+   14    41 00:e027  4c af e0    jmp dump_it
+   15    42 00:e02a  4c af e0    jmp fill_memory
+   16    43 00:e02d  4c af e0    jmp get_3byte_addr
+   17    44 00:e030  4c af e0    jmp get_alarm_status
+   18    45 00:e033  4c af e0    jmp get_byte_from_pc
+   19    46 00:e036  4c b2 e0    jmp get_chr
+   20    47 00:e039  4c b2 e0    jmp get_hex
+   21    48 00:e03c  4c b5 e0    jmp get_put_chr
+   22    49 00:e03f  4c b5 e0    jmp get_str
+   23    50 00:e042  4c b5 e0    jmp get_address
+   24    51 00:e045  4c b5 e0    jmp get_e_address
+   25    52 00:e048  4c b5 e0    jmp get_s_address
+   26    53 00:e04b  4c b8 e0    jmp put_chr
+   27    54 00:e04e  4c c1 e0    jmp put_str
+   28    55 00:e051  4c c1 e0    jmp read_alarm
+   29    56 00:e054  4c c1 e0    jmp read_date
+   30    57 00:e057  4c c1 e0    jmp read_time
+   31    58 00:e05a  4c c1 e0    jmp reset_alarm
+   32    59 00:e05d  4c c1 e0    jmp sbreak
+   33    60 00:e060  4c c1 e0    jmp select_common_baud_rate
+   34    61 00:e063  4c c1 e0    jmp send_byte_to_pc
+   35    62 00:e066  4c c4 e0    jmp send_cr
+   36    63 00:e069  4c cd e0    jmp send_space
+   37    64 00:e06c  4c cd e0    jmp send_hex_out
+   38    65 00:e06f  4c cd e0    jmp set_alarm
+   39    66 00:e072  4c cd e0    jmp set_breakpoint
+   40    67 00:e075  4c cd e0    jmp set_date
+   41    68 00:e078  4c cd e0    jmp set_time
+   42    69 00:e07b  4c cd e0    jmp version
+   43    70 00:e07e  4c cd e0    jmp wr_3_address
+   44    71 00:e081  4c cd e0    jmp xs28in
+   45    72 00:e084  4c cd e0    jmp reset
+   46    77 00:e087  20 cd e0    jsr ascbin
+   47    78 00:e08a  6b          rts.l
+   48    80 00:e08b  20 cd e0    jsr bin2dec
+   49    81 00:e08e  6b          rts.l
+   50    83 00:e08f  20 cd e0    jsr binasc
+   51    84 00:e092  6b          rts.l
+   52    86 00:e093  20 cd e0    jsr hexin
+   53    87 00:e096  6b          rts.l
+   54    89 00:e097  20 cd e0    jsr ifasc
+   55    90 00:e09a  6b          rts.l
+   56    92 00:e09b  20 cd e0    jsr isdecimal
+   57    93 00:e09e  6b          rts.l
+   58    95 00:e09f  20 cd e0    jsr ishex
+   59    96 00:e0a2  6b          rts.l
+   60    98 00:e0a3  20 cd e0    jsr upper_case
+   61    99 00:e0a6  6b          rts.l
+   62   101 00:e0a7  00 00 (...) .skip 08
+   63   123 00:e0af  4c d0 e0    jmp notcoded
+   64   129 00:e0b2  4c d0 e0    jmp notcoded
+   65   140 00:e0b5  4c d0 e0    jmp notcoded
+   66   145 00:e0b8  08          php
+   67   146 00:e0b9  e2 20       sep 20
+   68   147 00:e0bb  8f 77 df 00 sta.l putchr
+   69   148 00:e0bf  28          plp
+   70   149 00:e0c0  6b          rts.l
+   71   161 00:e0c1  4c d0 e0    jmp notcoded
+   72   168 00:e0c4  48          pha
+   73   169 00:e0c5  a9 0d       lda.# 0d
+   74   170 00:e0c7  8f 77 df 00 sta.l putchr
+   75   171 00:e0cb  68          pla
+   76   172 00:e0cc  6b          rts.l
+   77   193 00:e0cd  4c d0 e0    jmp notcoded
+   78   200 00:e0d0  18          clc
+   79   200 00:e0d1  fb          xce
+   80   201 00:e0d2  e2 20       sep 20
+   81   202 00:e0d4  c2 10       rep 10
+   82   204 00:e0d6  a9 00       lda.# .bank s_notcoded
+   83   205 00:e0d8  a2 f5 e0    ldx.# s_notcoded
+   84   206 00:e0db  22 c1 e0 00 jsr.l put_str
+   85   207 00:e0df  4c f4 e0    jmp alldone
+   86   213 00:e0e2  18          clc
+   87   213 00:e0e3  fb          xce
+   88   214 00:e0e4  e2 20       sep 20
+   89   215 00:e0e6  c2 10       rep 10
+   90   217 00:e0e8  a9 00       lda.# .bank s_interrupt
+   91   218 00:e0ea  a2 08 e1    ldx.# s_interrupt
+   92   219 00:e0ed  22 c1 e0 00 jsr.l put_str
+   93   220 00:e0f1  4c f4 e0    jmp alldone
+   94   226 00:e0f4  6b          rts.l
+   95   229 00:e0f5  52 6f (...) s_notcoded
+   96   230 00:e108  49 6e (...) s_interrupt
+
+MACROS:
+            (none)
+
+SYMBOL TABLE:
+                 alldone : 00e0f4
+            alter_memory : 00e0af
+                  ascbin : 00e0cd
+               backspace : 00e0af
+                 bin2dec : 00e0cd
+                  binasc : 00e0cd
+           control_tones : 00e0af
+          do_low_pwr_pgm : 00e0af
+   dump_1_line_to_output : 00e0af
+   dump_1_line_to_screen : 00e0af
+                 dump_it : 00e0af
+          dump_to_output : 00e0af
+         dump_to_printer : 00e0af
+          dump_to_screen : 00e0af
+    dump_to_screen_ascii : 00e0af
+                dumpregs : 00e0af
+                 dumps28 : 00e0af
+             fill_memory : 00e0af
+          get_3byte_addr : 00e0af
+             get_address : 00e0b5
+        get_alarm_status : 00e0af
+        get_byte_from_pc : 00e0af
+                 get_chr : 00e0b2
+           get_e_address : 00e0b5
+                 get_hex : 00e0b2
+             get_put_chr : 00e0b5
+           get_s_address : 00e0b5
+                 get_str : 00e0b5
+                  getchr : 00df75
+                   hexin : 00e0cd
+           hit_interrupt : 00e0e2
+                   ifasc : 00e0cd
+               isdecimal : 00e0cd
+                   ishex : 00e0cd
+                notcoded : 00e0d0
+                 put_chr : 00e0b8
+                 put_str : 00e0c1
+                  putchr : 00df77
+              read_alarm : 00e0c1
+               read_date : 00e0c1
+               read_time : 00e0c1
+                   reset : 00e0cd
+             reset_alarm : 00e0c1
+             s_interrupt : 00e108
+              s_notcoded : 00e0f5
+                  sbreak : 00e0c1
+ select_common_baud_rate : 00e0c1
+         send_byte_to_pc : 00e0c1
+                 send_cr : 00e0c4
+            send_hex_out : 00e0cd
+              send_space : 00e0cd
+               set_alarm : 00e0cd
+          set_breakpoint : 00e0cd
+                set_date : 00e0cd
+                set_time : 00e0cd
+              upper_case : 00e0cd
+                 version : 00e0cd
+            wr_3_address : 00e0cd
+                  xs28in : 00e0cd
+

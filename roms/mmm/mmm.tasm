@@ -1,0 +1,257 @@
+; Mock Mensch Monitor (MMM) Utility Emulator for
+; A Crude 65816 Emulator (crude65816)
+; Scot W. Stevenson <scot.stevenson@gmail.com>
+; First version: 22. Feb 2016
+; This version: 24. Feb 2016
+
+; After assembly, this creates an 8K binary file that can be 
+; loaded to 00:E000 in an emulator.  
+
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+; GNU General Public License for more details.
+
+; This program is written in Typist's Assembler Notation
+
+        .mpu 65816
+        .origin 00e000
+
+        putchr = 00:df77    ; Address the emulator uses for putchr
+        getchr = 00:df75    ; Address the emulator uses for getchr
+
+
+; Jump table. These must remain in the exact same location for the 
+; routines to be the equivalent of the real WDC Mensch Monitor. Do not 
+; add the .NATIVE directive before this table 
+
+        jmp alter_memory ; must be at 00:e000
+        jmp backspace ; 00:e003 
+        jmp * ; 00:e006 
+        jmp control_tones ; 00:e009  
+        jmp do_low_pwr_pgm ; 00:e00c  
+        jmp dumpregs ; 00:e00f  
+        jmp dumps28 ; 00:e012  
+        jmp dump_1_line_to_output ; 00:e015 
+        jmp dump_1_line_to_screen ; 00:e018  
+        jmp dump_to_output ; 00:e01b 
+        jmp dump_to_printer ; 00:e01e  
+        jmp dump_to_screen ; 00:e021  
+        jmp dump_to_screen_ascii ; 00:e024  
+        jmp dump_it ; 00:e027  
+        jmp fill_memory ; 00:e02a  
+        jmp get_3byte_addr ; 00:e02d 
+        jmp get_alarm_status ; 00:e030 
+        jmp get_byte_from_pc ; 00:e033
+        jmp get_chr ; 00:e036 
+        jmp get_hex ; 00:e039 
+        jmp get_put_chr ; 00:e03c 
+        jmp get_str   ; 00:e03f  
+        jmp get_address ; 00:e042  
+        jmp get_e_address ; 00:e045  
+        jmp get_s_address ; 00:e048  
+        jmp put_chr ; 00:e04b  
+        jmp put_str ; 00:e04e  
+        jmp read_alarm  ; 00:e051  
+        jmp read_date ; 00:e054  
+        jmp read_time  ; 00:e057  
+        jmp reset_alarm  ; 00:e05a  
+        jmp sbreak  ; 00:e05d  
+        jmp select_common_baud_rate ; 00:e060  
+        jmp send_byte_to_pc ; 00:e063  
+        jmp send_cr ; 00:e066  
+        jmp send_space ; 00:e069  
+        jmp send_hex_out ; 00:e06c  
+        jmp set_alarm ; 00:e06f  
+        jmp set_breakpoint ; 00:e072  
+        jmp set_date ; 00:e075  
+        jmp set_time ; 00:e078  
+        jmp version ; 00:e07b  
+        jmp wr_3_address ; 00:e07e  
+        jmp xs28in ; 00:e081  
+        jmp reset ; 00:e084
+
+; Subroutine table. These must remain in the exact same location for the
+; routines to be the equivalent of the WDC Mensch Monitor
+
+        jsr ascbin ; must be at 00:e08a 
+        rts.l        
+
+        jsr bin2dec ; 00:e08e 
+        rts.l 
+
+        jsr binasc ; 00:e08f 
+        rts.l
+
+        jsr hexin ; 00:e096 
+        rts.l
+
+        jsr ifasc ; 00:e09a 
+        rts.l
+
+        jsr isdecimal ; 00:e09e 
+        rts.l
+
+        jsr ishex ; 00:e0a2 
+        rts.l
+
+        jsr upper_case ; 00:e0a6 
+        rts.l
+
+        .skip 08    ; "reserved for expansion"
+
+
+; Jump targets. Those we don't code we send to a common routine
+
+alter_memory
+backspace
+control_tones
+do_low_pwr_pgm
+dumpregs
+dumps28
+dump_1_line_to_output
+dump_1_line_to_screen
+dump_to_output
+dump_to_printer 
+dump_to_screen 
+dump_to_screen_ascii 
+dump_it 
+fill_memory 
+get_3byte_addr 
+get_alarm_status 
+get_byte_from_pc
+            jmp notcoded
+
+; TODO 
+get_chr
+
+get_hex 
+            jmp notcoded
+
+; TODO 
+get_put_chr
+
+; TODO 
+get_str
+
+get_address
+get_e_address
+get_s_address
+            jmp notcoded
+
+; PUT_CHR -- Print chracter in A routine to screen. 
+put_chr
+            php
+            .a8
+            sta.l putchr
+            plp
+            rts.l
+
+; PUT_STR -- Print string to screen. Assumes bank byte of address of 
+; string is in 8-bit A and rest of address in 16-bit XY. All registers
+; are preserved, there are no error messages. WDC Manual for the Mensch
+; Monitor states that maximal string length is 640 bytes, this limit is 
+; currently not emulated. [TODO: Test wrapping behavior]
+put_str
+    ; TODO 
+
+read_alarm  
+read_date 
+read_time  
+reset_alarm  
+sbreak  
+select_common_baud_rate 
+send_byte_to_pc 
+            jmp notcoded
+
+
+; SEND_CR
+; Send a Carriage Return (CR, $0D) to the screen. Assumes that A is 8-bit,
+; conserves it. Must be called with long subroutine jump (jsr.l). 
+send_cr 
+            pha 
+            lda.# 0d
+            sta.l putchr        ; emulated address, assumes we're bank 00 
+            pla
+            rts.l
+
+
+send_space 
+send_hex_out 
+set_alarm 
+set_breakpoint 
+set_date 
+set_time 
+version 
+wr_3_address 
+xs28in 
+reset 
+ascbin 
+bin2dec 
+binasc 
+hexin 
+ifasc 
+isdecimal 
+ishex 
+upper_case 
+            jmp notcoded
+
+
+; --- Generic Routines --- 
+
+; Common target for all routines that are not (yet) coded
+notcoded
+            .native
+            .a8
+            .xy16
+
+            lda.# .bank s_notcoded
+            ldx.# s_notcoded
+            jsr.l put_str
+            jmp alldone 
+
+
+; We don't really do anything monitor-like at all, so if for some 
+; reason we are interrupted, we land here with an error message
+hit_interrupt
+            .native
+            .a8
+            .xy16
+
+            lda.# .bank s_interrupt
+            ldx.# s_interrupt
+            jsr.l put_str
+            jmp alldone
+
+
+; Common return point. Note we need a long subroutine jump
+; TODO restore registers etc
+alldone
+            rts.l
+
+; Strings
+s_notcoded  .string0 "Routine not coded."
+s_interrupt .string0 "Interrupt triggered, halting."
+
+   
+; Vector Table for the W65C264SXB
+; TODO these must all point to hit_interrupt
+
+   ; .advance 00:ffe4 
+
+   ; vectors w, \ ffe4  COP   (native mode) 
+   ; vectors w, \ ffe6  BRK   (native mode) 
+   ; vectors w, \ ffe8  ABORT (native mode) 
+   ; vectors w, \ ffea  NMI   (native mode) 
+   ; 0000    w, \ ffec  -- unused -- 
+   ; vectors w, \ ffee  IRQ   (native mode) 
+   ; 0000    w, \ fff0  -- unused -- 
+   ; 0000    w, \ fff2  -- unused -- 
+   ; vectors w, \ fff4  COP   (emulation mode) 
+   ; 0000    w, \ fff6  -- unused -- 
+   ; vectors w, \ fff8  ABORT (emulation mode) 
+   ; vectors w, \ fffa  NMI   (emulation mode)
+   ; vectors w, \ fffc  RESET (emulation mode) 
+   ; vectors w, \ fffe  IRQ   (emulation mode) 
+
+        .end

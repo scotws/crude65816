@@ -126,12 +126,26 @@ followed by a "run" or "step". The same procedure will let you store a value in,
 
 (note that the name is not "A") or X, Y, D, S, DBR, and PBR. To change the register sizes, use words
 ```
-        a:8 
-        a:16 
-        xy:8 
-        xy:16
+a:8 
+a:16 
+xy:8 
+xy:16
 ```
-from the command line. The interrupts can be triggered by hand as well: 
+from the command line. 
+
+> For instance, to test the PUT_CHR routine of the Mock Mensch Monitor (MMM) ROM
+> included in the emulator, follow these steps (assuming that MMM was loaded
+> through config.fs):
+```
+        native          \ switches 65816 to native mode
+        a:8             \ make A register 8 bit
+        61 C !          \ save ASCII value for "a" in A register
+        0e04b PC !      \ move to start of emulated PUT_CHR routine
+        step .state     \ walk through the routine
+```
+> At some point, a small "a" should appear.
+
+Interrupts can be triggered by hand as well: 
 ```
         reset-i
 ```

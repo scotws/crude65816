@@ -12,7 +12,7 @@ All these routines must be called with a Subroutine Long Jump (JSL / jsr.l)
 instruction.
 
 | Name | Location | Function |
-| +--- | +------+ | +------- |
+| :--- | :------: | :------- |
 | GET_CHR      | 00:E036 | Read one character from input, no echo | 
 | GET_PUT_CHR  | 00:E03C | Read one character from input, with echo | 
 | GET_STR      | 00:E03F | Get a string from input, with echo |

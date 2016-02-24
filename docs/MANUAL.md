@@ -3,7 +3,6 @@ Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 09. Jan 2015  
 This version: 24. Feb 2016  
 
-
 > THIS DOCUMENT IS CURRENTLY MERELY A COLLECTION OF NOTES. WHEN IN 
 > DOUBT, USE THE SOURCE CODE. 
 
@@ -25,7 +24,7 @@ note that at this moment, the emulator's status is ALPHA, defined as
 extensive testing of any part of the program yet.  
 
 
-## WHAT IT DOES
+## What It Does
 
 The Crude Emulator provides an environment to test 65816 binary programs.
 Because of the 8/16-bit hybrid nature of the MPU, it also functions as a 6502
@@ -37,7 +36,7 @@ page and bank boundries. There is a primitive provision for interrupt testing.
 The emulator offers a _very_ crude emulation of some of the core utility routines present in the Mensch Monitor ROM shipped by WDC in the [W65C265SXB](http://wdc65xx.com/134_265_SXB-engineering-development-system/gettingstarted/). 
 
 
-## WHAT IT DOESN'T DO
+## What It Doesn't Do
 
 The emulator does not track the system clock and in fact has no concept of time
 at all. Things are done when they are done. Currently, there is no emulation of
@@ -49,13 +48,17 @@ real silicon, mostly related to BCD addition and subtraction. See the bottom of
 this document for details. 
 
 
-## CALLING THE PROGRAM
+## Starting the Emulator
 
 By default, Gforth reserves measly 256k for the dictionary, which is not enough
 when you are going to simulate a 16M large memory space. We need to call Gforth
 with at least 
 
 ```gforth -m 18M``` 
+
+Then, from Forth, include the main emulator file with
+
+```include crude65816.fs```
 
 You can also start the emulator directly from the command line with
 
@@ -69,7 +72,7 @@ that are loaded at boot. There are various examples included. Note some of them
 might be for internal testing. 
 
 
-## IMPORTING ROM FILES
+## Importing ROM from Files
 
 The Crude Emulator has a very, well, crude memory model: It simply reserves 16
 MByte of RAM as the complete memory range of the 65816. During boot, the
@@ -81,7 +84,7 @@ happily let you change any of these values.
 The current ROM file is a primitive test program. 
 
 
-## USING THE PROGRAM
+## Using the Emulator
 
 In case you are new to Forth, know this: it is not a programming language, but
 a system to create specialized languages. As such, with the Crude Emulator you
@@ -115,27 +118,28 @@ word defined in the emulator can be used from the command line. To force the
 machine to run at a certain address, save it in the PC: 
 
 ```
-00e000 PC !
+        00e000 PC !
 ```
 
 followed by a "run" or "step". The same procedure will let you store a value in, say, the A register:
 
 ```
-61 C !
+        61 C !
 ```
 
 (note that the name is not "A") or X, Y, D, S, DBR, and PBR. To change the register sizes, use words
 ```
-a:8 
-a:16 
-xy:8 
-xy:16
+        a:8 
+        a:16 
+        xy:8 
+        xy:16
 ```
 from the command line. 
 
 > For instance, to test the PUT_CHR routine of the Mock Mensch Monitor (MMM) ROM
 > included in the emulator, follow these steps (assuming that MMM was loaded
 > through config.fs):
+
 ```
         native          \ switches 65816 to native mode
         a:8             \ make A register 8 bit
@@ -143,6 +147,7 @@ from the command line.
         0e04b PC !      \ move to start of emulated PUT_CHR routine
         step .state     \ walk through the routine
 ```
+
 > At some point, a small "a" should appear.
 
 Interrupts can be triggered by hand as well: 
@@ -153,7 +158,7 @@ To use RUN and STEP during testing, use the WAI instruction in the 65816 code
 to pause execution, and STP to stop the system. 
 
 
-## OTHER USEFUL COMBINATIONS
+## Other Useful Combinations
 
 To walk through the program 
 ```
@@ -171,8 +176,7 @@ watch what happens to $000000, for instance:
 Note FETCH does not wrap at the bank boundry, use FETCH/WRAP for this. 
 
 
-
-## HALTING THE EMULATION 
+## Halting the Emulation
 
 In many 6502 emulators, the BRK instruction is used to give control back to the
 emulator. We use the 65816's STP instruction, which halts the processor. After
@@ -180,7 +184,7 @@ STP, you can resume the emulation with either STEP or RUN from the same spot.
 
 
 
-## EMULATING INTERRUPTS
+## Emulating Interrupts
 
 To test interrupts, place a WAI instruction in the code at the place where you
 want the interrupt to trigger. Run the code until then. When the emulation
@@ -195,8 +199,7 @@ Note that after an interrupt, the emulator halts to let the user check things.
 It must be restared with RUN or STEP. 
 
 
-
-## NAMES OF MODES 
+## Internal Syntax
 
 Internally, the Crude Emulator internally uses an assembler syntax called
 [Typist's Assembler Notation](https://github.com/scotws/tasm65816). TAN
@@ -238,7 +241,7 @@ source code.
 
 
 
-## NOTES ON INTERNAL CONSTRUCTION FOR FORTHWRIGHTS
+## For Forthwrights: Code Details 
 
 The Crude Emulator puts all registers in variables. Experiments during
 development with either A/C or PC as TOS made working with the emulator too
@@ -251,8 +254,7 @@ MASK16) that are probably not necessary. These are marked with "paranoid" in
 the source code. 
 
 
-
-## KNOWN ISSUES 
+## Known Issues
 
 The Overflow Flag (v) is not correctly set in Decimal mode. See
 http://www.6502.org/tutorials/vflag.html and
@@ -267,24 +269,22 @@ results, and then rerunning it, but instead is run after an instruction. This
 bug has low priority.  
 
 
-
-## OTHER NOTES
+## Other Notes
 
 Though the documentation is unclear on this subject, tests have shown that you
 can relocate the Direct Page in Emulation Mode, see
 http://forum.6502.org/viewtopic.php?f=8&t=3459&p=40389#p40370
 
 
-
-## LITERATURE
+## Literature
 
 List of paper and online literature used, with date of last access where appropriate. 
 
-### Books:
+### Books
 
 "Forth Programmer's Handbook", 3rd edition. Conklin and Rather (2007) 
 
-### Special topics: 
+### Special topics
 
 Interrupt system: http://sbc.bcstechnology.net/65c816interrupts.html   
 Wrapping on banks and pages: http://forum.6502.org/viewtopic.php?f=8&t=3459&start=30#p40855

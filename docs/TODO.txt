@@ -1,7 +1,7 @@
 TODO for A Crude 65816 Emulator
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 27. May 2015
-This version: 22. Feb 2016
+This version: 24. Feb 2016
 
 
 IMMEDIATELY 
@@ -16,7 +16,7 @@ IMMEDIATELY
 SHORT TERM
 
 - Avoid all optimization before we know if we're going to have to rewrite
-
+- Rewrite MANUAL.txt as MANUAL.md
 
 LONG TERM 
 

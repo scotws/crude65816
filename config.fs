@@ -16,6 +16,8 @@
 \ libraries or other ROM chips.
 \ 800000 s" data.bin"  loadrom
 
+\ Tests. Unless your name is Scot, you probably don't want to touch these
+002000 s" tests/tink.bin" loadrom
 
 \  --- DEFINITIONS --- 
 

@@ -2,25 +2,27 @@ A Tinkerer's Assembler for the 6502/65c02/65816
 Version BETA  23. February 2016
 Copyright 2015, 2016 Scot W. Stevenson <scot.stevenson@gmail.com>
 This program comes with ABSOLUTELY NO WARRANTY
-Hexdump file of mmm.tasm (total of 294 bytes)
-Generated on Wed Feb 24 11:33:36 2016
+Hexdump file of mmm.tasm (total of 325 bytes)
+Generated on Fri Feb 26 19:34:08 2016
 
 00e000: 4c af e0 4c af e0 4c 06 e0 4c af e0 4c af e0 4c 
 00e010: af e0 4c af e0 4c af e0 4c af e0 4c af e0 4c af 
 00e020: e0 4c af e0 4c af e0 4c af e0 4c af e0 4c af e0 
 00e030: 4c af e0 4c af e0 4c b2 e0 4c b2 e0 4c b5 e0 4c 
 00e040: b5 e0 4c b5 e0 4c b5 e0 4c b5 e0 4c b8 e0 4c c1 
-00e050: e0 4c c1 e0 4c c1 e0 4c c1 e0 4c c1 e0 4c c1 e0 
-00e060: 4c c1 e0 4c c1 e0 4c c4 e0 4c cd e0 4c cd e0 4c 
-00e070: cd e0 4c cd e0 4c cd e0 4c cd e0 4c cd e0 4c cd 
-00e080: e0 4c cd e0 4c cd e0 20 cd e0 6b 20 cd e0 6b 20 
-00e090: cd e0 6b 20 cd e0 6b 20 cd e0 6b 20 cd e0 6b 20 
-00e0a0: cd e0 6b 20 cd e0 6b 00 00 00 00 00 00 00 00 4c 
-00e0b0: d0 e0 4c d0 e0 4c d0 e0 08 e2 20 8f 77 df 00 28 
-00e0c0: 6b 4c d0 e0 48 a9 0d 8f 77 df 00 68 6b 4c d0 e0 
-00e0d0: 18 fb e2 20 c2 10 a9 00 a2 f5 e0 22 c1 e0 00 4c 
-00e0e0: f4 e0 18 fb e2 20 c2 10 a9 00 a2 08 e1 22 c1 e0 
-00e0f0: 00 4c f4 e0 6b 52 6f 75 74 69 6e 65 20 6e 6f 74 
-00e100: 20 63 6f 64 65 64 2e 00 49 6e 74 65 72 72 75 70 
-00e110: 74 20 74 72 69 67 67 65 72 65 64 2c 20 68 61 6c 
-00e120: 74 69 6e 67 2e 00 
+00e050: e0 4c df e0 4c df e0 4c df e0 4c df e0 4c df e0 
+00e060: 4c df e0 4c df e0 4c e2 e0 4c eb e0 4c eb e0 4c 
+00e070: eb e0 4c eb e0 4c eb e0 4c eb e0 4c eb e0 4c eb 
+00e080: e0 4c eb e0 4c eb e0 20 eb e0 6b 20 eb e0 6b 20 
+00e090: eb e0 6b 20 eb e0 6b 20 eb e0 6b 20 eb e0 6b 20 
+00e0a0: eb e0 6b 20 eb e0 6b 00 00 00 00 00 00 00 00 4c 
+00e0b0: ee e0 4c ee e0 4c ee e0 08 e2 20 8f 77 df 00 28 
+00e0c0: 6b 5a 0b 8b f4 00 00 2b 85 68 86 66 a0 00 00 b7 
+00e0d0: 66 f0 09 29 7f 22 b8 e0 00 c8 80 f3 ab 2b 7a 6b 
+00e0e0: 4c ee e0 48 a9 0d 8f 77 df 00 68 6b 4c ee e0 18 
+00e0f0: fb e2 20 c2 10 a9 00 a2 13 e1 22 c1 e0 00 4c 12 
+00e100: e1 18 fb e2 20 c2 10 a9 00 a2 26 e1 22 c1 e0 00 
+00e110: 4c 12 e1 6b 52 6f 75 74 69 6e 65 20 6e 6f 74 20 
+00e120: 63 6f 64 65 64 2e 00 49 6e 74 65 72 72 75 70 74 
+00e130: 20 74 72 69 67 67 65 72 65 64 2c 20 68 61 6c 74 
+00e140: 69 6e 67 2e 00 

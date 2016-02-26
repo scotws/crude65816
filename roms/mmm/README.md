@@ -35,9 +35,3 @@ Forth](https://github.com/scotws/crude65816). The emulator assumes that the name
 of the file is `mmm.bin` in this directory. Make sure to uncomment the correct
 lines in config.sys, that is, both the LOADROM entry as well as the addresses
 for the emulator's PUTCHR and GETCHR routines.
-
-## Syntax of the Mock Mensch Monitor 
-
-This program is written in Typist's Assembler Notation, see
-[https://docs.google.com/document/d/16Sv3Y-3rHPXyxT1J3zLBVq4reSPYtY2G6OSojNTm4SQ](https://docs.google.com/document/d/16Sv3Y-3rHPXyxT1J3zLBVq4reSPYtY2G6OSojNTm4SQ)
-for details.

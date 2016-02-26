@@ -2,7 +2,7 @@
 ; A Crude 65816 Emulator (crude65816)
 ; Scot W. Stevenson <scot.stevenson@gmail.com>
 ; First version: 22. Feb 2016
-; This version: 24. Feb 2016
+; This version: 26. Feb 2016
 
 ; After assembly, this creates an 8K binary file that can be 
 ; loaded to 00:E000 in an emulator.  
@@ -19,6 +19,8 @@
 
         putchr = 00:df77    ; Address the emulator uses for putchr
         getchr = 00:df75    ; Address the emulator uses for getchr
+
+        tmp4 = 00:0066      ; 3-byte DP address used by PUT_STR
 
 
 ; Jump table. These must remain in the exact same location for the 
@@ -139,7 +141,10 @@ get_e_address
 get_s_address
             jmp notcoded
 
-; PUT_CHR -- Print chracter in A routine to screen. 
+; PUT_CHR -- Print chracter in A routine to screen. We currently ignore 
+; the carry bit. If (once) we do include, we'll have to change PUT_STR 
+; as well
+; TODO: Handle carry flag
 put_chr
             php
             .a8
@@ -151,9 +156,40 @@ put_chr
 ; string is in 8-bit A and rest of address in 16-bit XY. All registers
 ; are preserved, there are no error messages. WDC Manual for the Mensch
 ; Monitor states that maximal string length is 640 bytes, this limit is 
-; currently not emulated. [TODO: Test wrapping behavior]
+; currently not emulated. As with PUT_CHR, we ignore the carry flag.
+; TODO: Test bank wrapping behavior
+; TODO: Handle carry flag
 put_str
-    ; TODO 
+            phy
+            phd                 ; save Direct Page
+            phb
+
+            phe.# 0000
+            pld                 ; Direct Page is 0000
+
+            sta.d tmp4 + 2      ; save bank byte of string
+            stx.d tmp4
+
+            ldy.# 0000
+
+put_str_next
+            lda.dily tmp4       ; LDA [TMP4],Y
+            beq put_str_done
+
+            ; The Mensch Monitor only prints 7-bit ASCII, which sucks
+            ; if you're not coding in English, but this is an emulator
+            ; so we go along
+            and.# 7f            
+            jsr.l put_chr
+
+            iny 
+            bra put_str_next
+
+put_str_done
+            plb
+            pld
+            ply
+            rts.l
 
 read_alarm  
 read_date 
@@ -171,7 +207,7 @@ send_byte_to_pc
 send_cr 
             pha 
             lda.# 0d
-            sta.l putchr        ; emulated address, assumes we're bank 00 
+            sta.l putchr     ; emulated address, assumes we're bank 00 
             pla
             rts.l
 

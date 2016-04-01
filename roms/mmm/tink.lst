@@ -3,11 +3,11 @@ Version BETA  23. February 2016
 Copyright 2015, 2016 Scot W. Stevenson <scot.stevenson@gmail.com>
 This program comes with ABSOLUTELY NO WARRANTY
 Code listing for file mmm.tasm
-Generated on Fri Apr  1 03:52:11 2016
+Generated on Fri Apr  1 04:23:02 2016
 Target MPU: 65816
 Number of passes executed: 27
 Number of steps executed: 7
-Assembly time: 0.34192 seconds
+Assembly time: 0.34236 seconds
 Code origin: 00e000
 Bytes of machine code: 356
 
@@ -121,27 +121,27 @@ LISTING:
   106   227 00:e101  7a          ply
   107   228 00:e102  6b          rts.l
   108   237 00:e103  4c 12 e1    jmp notcoded
-  109   246 00:e106  48          pha
-  110   247 00:e107  a9 0d       lda.# 0d
-  111   248 00:e109  8f 77 df 00 sta.l putchr
-  112   249 00:e10d  68          pla
-  113   250 00:e10e  6b          rts.l
-  114   271 00:e10f  4c 12 e1    jmp notcoded
-  115   279 00:e112  e2 20       sep 20
-  116   280 00:e114  c2 10       rep 10
-  117   282 00:e116  a9 00       lda.# .bank s_notcoded
-  118   283 00:e118  a2 33 e1    ldx.# s_notcoded
-  119   284 00:e11b  22 e4 e0 00 jsr.l put_str
-  120   285 00:e11f  4c 32 e1    jmp alldone
-  121   292 00:e122  e2 20       sep 20
-  122   293 00:e124  c2 10       rep 10
-  123   295 00:e126  a9 00       lda.# .bank s_interrupt
-  124   296 00:e128  a2 46 e1    ldx.# s_interrupt
-  125   297 00:e12b  22 e4 e0 00 jsr.l put_str
-  126   298 00:e12f  4c 32 e1    jmp alldone
-  127   304 00:e132  6b          rts.l
-  128   307 00:e133  52 6f (...) s_notcoded
-  129   308 00:e146  49 6e (...) s_interrupt
+  109   249 00:e106  48          pha
+  110   250 00:e107  a9 0a       lda.# 0a
+  111   251 00:e109  8f 77 df 00 sta.l putchr
+  112   252 00:e10d  68          pla
+  113   253 00:e10e  6b          rts.l
+  114   274 00:e10f  4c 12 e1    jmp notcoded
+  115   282 00:e112  e2 20       sep 20
+  116   283 00:e114  c2 10       rep 10
+  117   285 00:e116  a9 00       lda.# .bank s_notcoded
+  118   286 00:e118  a2 33 e1    ldx.# s_notcoded
+  119   287 00:e11b  22 e4 e0 00 jsr.l put_str
+  120   288 00:e11f  4c 32 e1    jmp alldone
+  121   295 00:e122  e2 20       sep 20
+  122   296 00:e124  c2 10       rep 10
+  123   298 00:e126  a9 00       lda.# .bank s_interrupt
+  124   299 00:e128  a2 46 e1    ldx.# s_interrupt
+  125   300 00:e12b  22 e4 e0 00 jsr.l put_str
+  126   301 00:e12f  4c 32 e1    jmp alldone
+  127   307 00:e132  6b          rts.l
+  128   310 00:e133  52 6f (...) s_notcoded
+  129   311 00:e146  49 6e (...) s_interrupt
 
 MACROS:
             (none)

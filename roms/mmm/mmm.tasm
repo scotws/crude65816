@@ -240,11 +240,14 @@ send_byte_to_pc
 ; SEND_CR
 ; Send a Carriage Return (CR, $0D) to the screen. Assumes that A is 8-bit,
 ; conserves it. Must be called with long subroutine jump (jsr.l). 
+
+; NOTE: For emulation purposes, we do not send a CR, but a linefeed (LF, $0A),
+; because a CR causes stuff to overwrite.
 send_cr 
             .!native
             .!a8
             pha 
-            lda.# 0d
+            lda.# 0a
             sta.l putchr     ; emulated address, assumes we're bank 00 
             pla
             rts.l

@@ -20,6 +20,15 @@ instruction.
 | PUT_STR      | 00:E04E | Print a string | 
 | SEND_CR      | 00:E066 | Print a Carriage Return | 
 
+
+# Chances related to the Mensch Monitor code
+
+*SEND_CR* does not send a CR ($0D) but rather a line feed (LF, $0A) character,
+because CR causes the text to overwrite itself on normal terminals.
+
+
+## Links
+
 Consult the official [Mensch Monitor ROM Reference
 Manual](http://www.westerndesigncenter.com/Wdc/documentation/265monrom.pdf), the
 official [Assembler code listing of the Mensch

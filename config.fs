@@ -1,8 +1,9 @@
 \ Configuration file for A Crude 65816 Emulator
 \ Scot W. Stevenson <scot.stevenson@gmail.com>
-\ This version: 24. Feb 2016
+\ This version: 01. April 2016
 
 \ This file must be loaded before io.fs
+\
 
 \ --- ROMS ---
 
@@ -17,7 +18,8 @@
 \ 800000 s" data.bin"  loadrom
 
 \ Tests. Unless your name is Scot, you probably don't want to touch these
-002000 s" tests/tink.bin" loadrom
+008000 s" tests/tink.bin" loadrom
+
 
 \  --- DEFINITIONS --- 
 

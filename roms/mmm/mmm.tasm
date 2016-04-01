@@ -2,7 +2,7 @@
 ; A Crude 65816 Emulator (crude65816)
 ; Scot W. Stevenson <scot.stevenson@gmail.com>
 ; First version: 22. Feb 2016
-; This version: 26. Feb 2016
+; This version: 01. April 2016
 
 ; After assembly, this creates an 8K binary file that can be 
 ; loaded to 00:E000 in an emulator.  
@@ -76,28 +76,28 @@
 ; Subroutine table. These must remain in the exact same location for the
 ; routines to be the equivalent of the WDC Mensch Monitor
 
-        jsr ascbin ; must be at 00:e08a 
+        jsr ascbin ; must be at 00:e087
         rts.l        
 
-        jsr bin2dec ; 00:e08e 
+        jsr bin2dec ; 00:e08b 
         rts.l 
 
         jsr binasc ; 00:e08f 
         rts.l
 
-        jsr hexin ; 00:e096 
+        jsr hexin ; 00:e093 
         rts.l
 
-        jsr ifasc ; 00:e09a 
+        jsr ifasc ; 00:e097 
         rts.l
 
-        jsr isdecimal ; 00:e09e 
+        jsr isdecimal ; 00:e09b 
         rts.l
 
-        jsr ishex ; 00:e0a2 
+        jsr ishex ; 00:e09f 
         rts.l
 
-        jsr upper_case ; 00:e0a6 
+        jsr upper_case ; 00:e0a7 
         rts.l
 
         .skip 08    ; "reserved for expansion"
@@ -124,17 +124,51 @@ get_alarm_status
 get_byte_from_pc
             jmp notcoded
 
-; TODO 
+
+; GET_CHR -- Get a character from the keyboard. 
+; TODO see if we keep a16 or actually switch like here
 get_chr
+            .!native
+            .a8
+            lda 00df75    ; Address the emulator uses for getchr
+            rts.l
 
 get_hex 
+get_put_chr
             jmp notcoded
 
-; TODO 
-get_put_chr
-
-; TODO 
+; GET_STR -- Get a string and store it with an added terminating zero at
+; the address provided by A (bank byte) and X (16 bit address)
 get_str
+            .!native
+            .!a8
+            .!xy16
+            phy
+            phd
+            phb
+            phe.# 0000
+            pld
+
+            sta.d tmp4 + 2
+            stx.d tmp4
+
+            ldy.# 0000 
+
+get_str_loop
+            jsr.l get_chr
+            sta.dily tmp4
+            iny
+            cmp.# 0d            ; CR ends input
+            bne get_str_loop
+
+            lda.# 00
+            sta.dily tmp4
+            
+            plb
+            pld
+            ply
+            rts.l
+
 
 get_address
 get_e_address
@@ -146,10 +180,9 @@ get_s_address
 ; as well
 ; TODO: Handle carry flag
 put_chr
-            php
-            .a8
+            .!native
+            .!a8
             sta.l putchr
-            plp
             rts.l
 
 ; PUT_STR -- Print string to screen. Assumes bank byte of address of 
@@ -160,6 +193,9 @@ put_chr
 ; TODO: Test bank wrapping behavior
 ; TODO: Handle carry flag
 put_str
+            .!native
+            .!a8
+            .!xy16
             phy
             phd                 ; save Direct Page
             phb
@@ -205,6 +241,8 @@ send_byte_to_pc
 ; Send a Carriage Return (CR, $0D) to the screen. Assumes that A is 8-bit,
 ; conserves it. Must be called with long subroutine jump (jsr.l). 
 send_cr 
+            .!native
+            .!a8
             pha 
             lda.# 0d
             sta.l putchr     ; emulated address, assumes we're bank 00 
@@ -237,7 +275,7 @@ upper_case
 
 ; Common target for all routines that are not (yet) coded
 notcoded
-            .native
+            .!native
             .a8
             .xy16
 
@@ -250,7 +288,7 @@ notcoded
 ; We don't really do anything monitor-like at all, so if for some 
 ; reason we are interrupted, we land here with an error message
 hit_interrupt
-            .native
+            .!native
             .a8
             .xy16
 

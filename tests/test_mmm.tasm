@@ -1,27 +1,26 @@
 ; test routines for the Mock Mensch Monitor ROM
 ; Scot W. Stevenson <scot.stevenson@gmail.com>
-; This version: 26. Feb 2016
+; This version: 27. Feb 2016
 
 
         .origin 2000
         .mpu 65816
 
+        str1 = c00000
+
         .native
         .a8
         .xy16
 
-        ; Part 1: Print "a"
-        lda.# 61
+        lda.# 3f            ; question mark
         jsr.l 00e04b        ; PUT_CHR
 
-        ; Part 2: Print a small string
-        lda.# .bank str1    ; bank is 00
+        lda.# .bank str1
         ldx.# str1
-        jsr.l 00e04e
+
+        jsr.l 00e04e        ; GET_CHR
 
         stp
-
-str1    .string0 "Print me!"
 
 
         .end

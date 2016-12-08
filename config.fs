@@ -18,7 +18,8 @@
 \ 800000 s" data.bin"  loadrom
 
 \ Tests. Unless your name is Scot, you probably don't want to touch these
-008000 s" tests/tink.bin" loadrom
+\ 008000 s" tests/tink.bin" loadrom
+008000 s" tests/test_mmm.bin" loadrom
 
 
 \  --- DEFINITIONS --- 

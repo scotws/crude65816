@@ -2,7 +2,7 @@
 \ Copyright 2015, 2016 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 09. Jan 2015
-\ This version: 24. Feb 2016
+\ This version: 22. Dec 2016
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version ALPHA  24. Feb 2016)  
+cr .( Version ALPHA  22. Dec 2016)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -582,7 +582,7 @@ variable xy16flag   xy16flag clear
    ['] cmp16 is cmp.xy
    ['] push16 is push.xy 
    ['] pull16 is pull.xy
-   X @  00FF AND  X !   Y @  00FF AND  Y !  \ paranoid
+   X @  0FFFF AND  X !   Y @  0FFFF AND  Y !  \ paranoid
    xy16flag set ; 
 
 : xy:8 ( -- )  
@@ -605,17 +605,11 @@ variable xy16flag   xy16flag clear
 
 \ In native mode, changing m and x flags might change the size of these
 \ registers 
-\ TODO This sucks, get rid of the IFs 
 : flag-modeswitch ( -- ) 
-   e-flag clear? if
-      m-flag set? if a:8  a16flag clear  else
-                     a:16  a16flag set  then 
-      x-flag set? if xy:8  xy16flag clear  else
-                     xy:16  xy16flag set  then 
-   else 
-   \ In emulated mode, bit 5 is always zero 
-      unused-flag clear
-   then ;  
+   e-flag set? if unused-flag clear else
+      m-flag set? if a:8 else a:16 then 
+      x-flag set? if xy:8 else xy:16 then 
+   then ; 
 
 : >P ( u8 -- ) 
    0 7 ?do
@@ -1400,6 +1394,7 @@ cr .( Setting up interrupts ...)
 \ emulated DP mode wrapping
 : step ( -- )  
    fetchPC8  dup current-opcode !  cells  opc-jumptable +  @  execute ; 
+: walk ( -- ) begin step .state key drop again ; 
 : run ( -- )  begin step again ; 
 
 \ ---- START EMULATION ----
@@ -1408,5 +1403,6 @@ cr cr .( All done. Bringing up machine.) cr
 poweron 
 .state 
 
-cr ." Machine ready. Type 'run' to start emulation, 'step' for single-step."
+cr ." Machine ready." 
+cr ." Type 'run' to start emulation, 'walk' or 'state' for single-step."
 

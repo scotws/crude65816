@@ -1,6 +1,6 @@
 \ Configuration file for A Crude 65816 Emulator
 \ Scot W. Stevenson <scot.stevenson@gmail.com>
-\ This version: 01. April 2016
+\ This version: 22. Dec 2016
 
 \ This file must be loaded before io.fs
 \
@@ -8,10 +8,9 @@
 \ --- ROMS ---
 
 \ Pick one as the operating system. 00ff00 is putchr, 00ff01 is getchar
-\ 00e000 s" roms/rom65c02.bin" loadrom  \ test program for the 65c02
 \ 00e000 s" roms/rom65816.bin" loadrom  \ operating system, BIOS, *DEFAULT*
-00e000 s" roms/mmm/mmm.bin" loadrom   \ W65C265SXB utility routines
-
+\ 00e000 s" roms/rom65c02.bin" loadrom  \ test program for the 65c02
+\ 00e000 s" roms/mmm/mmm.bin" loadrom   \ Mock Mensch Monitor W65C265SXB ROM
 
 \ Dummy file to show how ROM data is loaded. Later, these can be program
 \ libraries or other ROM chips.
@@ -19,7 +18,8 @@
 
 \ Tests. Unless your name is Scot, you probably don't want to touch these
 \ 008000 s" tests/tink.bin" loadrom
-008000 s" tests/test_mmm.bin" loadrom
+00e000 s" tests/tink.bin" loadrom
+\ 008000 s" tests/test_mmm.bin" loadrom
 
 
 \  --- DEFINITIONS --- 

@@ -27,7 +27,9 @@ discussion of the program [at 6502.org]
 
 The 65816 is the ["big sibling"](http://en.wikipedia.org/wiki/WDC_65816/65802) 
 of the venerable 6502 8-bit processor. It is a hybrid processor that can run in
-16-bit ("native") and 8-bit ("emulated") mode.
+16-bit ("native") and 8-bit ("emulated") mode. Its core can be found in single
+board computers such as the
+[W65C265SXB](http://wdc65xx.com/65xx-store/sxb-boards/w65c265sxb-engineering-development-system/).
 
 After bulding a 6502 machine as a hobby, [the "Übersquirrel" Mark Zero]
 (http://uebersquirrel.blogspot.de/) (ÜSqM0), I found eight bits to be too
@@ -41,11 +43,11 @@ But it works.
 
 ### BUT MOTHER OF DRAGONS, WHY IN FORTH?
 
-The Übersquirrel Mark Zero taught me how amazingly powerful Forth is on simple
-hardware, how short the programs can be, and how fun it is just to code it. In
-fact one of the main reasons for switching to the 65816 is to be able to do more
-with Forth. The Crude Emulator itself relies on modern hardware to work and just
-assumes we have enough RAM and a fast processor for everything. 
+The Übersquirrel Mark Zero taught me how powerful Forth is on simple hardware,
+how short the programs can be, and how fun it is just to code it. In fact one of
+the main reasons for switching to the 65816 is to be able to do more with Forth.
+The Crude Emulator itself relies on modern hardware to work and just assumes we
+have enough RAM and a fast processor for everything. 
 
 See `docs/MANUAL.txt` for further information.
 

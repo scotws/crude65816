@@ -2,7 +2,7 @@
 \ Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com>
 \ Written with gforth 0.7
 \ First version: 09. Jan 2015
-\ This version: 24. Oct 2015
+\ This version: 22. Dec 2016
 
 \ This program is free software: you can redistribute it and/or modify
 \ it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 \ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cr .( A Crude 65816 Emulator in Forth)
-cr .( Version ALPHA  24. Oct 2015)  
+cr .( Version BETA 22. Dec 2016)  
 cr .( Copyright 2015 Scot W. Stevenson <scot.stevenson@gmail.com> ) 
 cr .( This program comes with ABSOLUTELY NO WARRANTY) cr
 
@@ -1401,6 +1401,7 @@ cr .( Setting up interrupts ...)
 : step ( -- )  
    fetchPC8  dup current-opcode !  cells  opc-jumptable +  @  execute ; 
 : run ( -- )  begin step again ; 
+: walk ( -- ) begin step .state  key drop again
 
 \ ---- START EMULATION ----
 cr cr .( All done. Bringing up machine.) cr 

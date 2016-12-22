@@ -1400,8 +1400,8 @@ cr .( Setting up interrupts ...)
 \ emulated DP mode wrapping
 : step ( -- )  
    fetchPC8  dup current-opcode !  cells  opc-jumptable +  @  execute ; 
+: walk ( -- ) begin step .state  key drop again ; 
 : run ( -- )  begin step again ; 
-: walk ( -- ) begin step .state  key drop again
 
 \ ---- START EMULATION ----
 cr cr .( All done. Bringing up machine.) cr 
@@ -1409,5 +1409,5 @@ cr cr .( All done. Bringing up machine.) cr
 poweron 
 .state 
 
-cr ." Machine ready. Type 'run' to start emulation, 'step' for single-step."
+cr ." Machine ready. Type 'run' to start emulation, 'walk' for single-step."
 

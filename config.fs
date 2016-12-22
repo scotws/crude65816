@@ -26,6 +26,6 @@
 \ 00ff01 value getchr   \ blocks until character received
 
 \ For Liara Forth testing (268SBX Mensch Monitor addresses)
-00e04b value getchr   \ blocks until character received
-00e036 value putchr
+00e036 value getchr   \ blocks until character received
+00e04b value putchr
 

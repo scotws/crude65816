@@ -6,6 +6,8 @@ This is a ROM file for the W65C265SXB that emulates certain utility routines for
 the Mensch Monitor from WDC to make development with that single board computer
 easier. It does _not_ function as a monitor itself. 
 
+**NOTE THIS IS A PRE-ALPHA STAGE. THINGS PROBABLY WON'T WORK**
+
 ## Utility routines currently emulated
 
 All these routines must be called with a Subroutine Long Jump (JSL / jsr.l)

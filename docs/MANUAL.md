@@ -1,7 +1,7 @@
 # Manual for A Crude 65816 Emulator 
 Scot W. Stevenson <scot.stevenson@gmail.com>  
 First version: 09. Jan 2015  
-This version: 24. Feb 2016  
+This version: 23. Dec 2016
 
 > THIS DOCUMENT IS CURRENTLY MERELY A COLLECTION OF NOTES. WHEN IN 
 > DOUBT, USE THE SOURCE CODE. 
@@ -33,7 +33,11 @@ defining various files as ROM areas via the main CONFIG.FS file. The emulator
 makes an spirited attempt to handle the correct wrapping of instructions at
 page and bank boundries. There is a primitive provision for interrupt testing. 
 
-The emulator offers a _very_ crude emulation of some of the core utility routines present in the Mensch Monitor ROM shipped by WDC in the [W65C265SXB](http://wdc65xx.com/134_265_SXB-engineering-development-system/gettingstarted/). 
+The emulator offers a _very_ crude emulation of some of the core utility
+routines present in the Mensch Monitor ROM shipped by WDC in the
+[W65C265SXB](http://wdc65xx.com/134_265_SXB-engineering-development-system/gettingstarted/).
+By very crude we mean that it doesn't really work yet for anything that is not
+PUT_CHR. 
 
 
 ## What It Doesn't Do
@@ -111,17 +115,18 @@ prints some information to the screen.
         reset-i         - trigger the RESET interrupt 
         run             - run the emulator continuously
         step            - run one instruction in single-step mode
+        walk            - "step .state", press key to continue, CNTRL-C to quit
 
-STEP is usually used in combination with .STATE ("step .state") to show the
-status of the emulator after every step. Because of the nature of Forth, any
-word defined in the emulator can be used from the command line. To force the
-machine to run at a certain address, save it in the PC: 
+Because of the nature of Forth, any word defined in the emulator can be used
+from the command line. To force the machine to run at a certain address, save it
+in the PC: 
 
 ```
         00e000 PC !
 ```
 
-followed by a "run" or "step". The same procedure will let you store a value in, say, the A register:
+followed by a "run", "step" or "walk". The same procedure will let you store 
+a value in, say, the A register:
 
 ```
         61 C !
@@ -160,11 +165,11 @@ to pause execution, and STP to stop the system.
 
 ## Other Useful Combinations
 
-To walk through the program 
+To walk through the program, use "walk" or 
 ```
         step .state
 ```
-To walk through the program, showing the stack with every step (emulation mode only)
+To walk through the program while showing the stack with every step (emulation mode only)
 ```
         step .state .stack
 ```

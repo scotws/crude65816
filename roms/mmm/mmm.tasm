@@ -2,7 +2,7 @@
 ; A Crude 65816 Emulator (crude65816)
 ; Scot W. Stevenson <scot.stevenson@gmail.com>
 ; First version: 22. Feb 2016
-; This version: 01. April 2016
+; This version: 23. Dec 2016
 
 ; After assembly, this creates an 8K binary file that can be
 ; loaded to 00:E000 in an emulator.
@@ -184,7 +184,7 @@ put_chr
                 rts.l
 
 ; PUT_STR -- Print string to screen. Assumes bank byte of address of
-; string is in 8-bit A and rest of address in 16-bit XY. All registers
+; string is in 8-bit A and rest of address in 16-bit X. All registers
 ; are preserved, there are no error messages. WDC Manual for the Mensch
 ; Monitor states that maximal string length is 640 bytes, this limit is
 ; currently not emulated. As with PUT_CHR, we ignore the carry flag.

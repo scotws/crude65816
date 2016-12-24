@@ -1,0 +1,228 @@
+\ Testing ROM for PHE family of instructions 
+\ A Crude 65816 Emulator (crude65816)
+\ Scot W. Stevenson <scot.stevenson@gmail.com>
+\ This version: 26. Okt 2015
+
+   hex
+   cr .( Starting assembly ... )
+
+\ --- DEFINITIONS ---
+
+   0ff00 value putchr  \ py65mon address for character output
+   0ff01 value getchr  \ py65mon address to receive character input
+
+   0e000 origin  \ required  
+
+\ --- SETUP --- 
+
+   \ All of our vectors go here because we're cheap 
+-> vectors 
+
+   \ init stack
+    0ff ldx.#
+        txs 
+     00 ldx.# 
+
+\       wai 
+
+
+\ *** TEST CODE ***
+
+\ These are not comprehesive tests. Execution stops either when all tests 
+\ are completed successfully (X and Y both 0FF) or STP with error
+
+\ Error codes in A are 01, 02, etc
+\ Success codes in A are FF, FE, etc
+
+
+\ ###############################
+\ ## TESTING PHE INSTRUCTIONS ###
+\ ###############################
+
+\ (These are PEA, PEI, and PER in traditional notation)
+
+\ ------------------------------
+-> dpw0 
+
+    \ HIER HIER 
+
+
+    stp 
+
+    \ We are in emulation mode (TEST 1), we SHOULD wrap on page
+    \ We assume D is 0000 (on page boundry, TEST 2) 
+
+    0ff lda.#
+     80 ldx.#
+     90 sta.dx  \ old opcode (TEST 3)
+
+     10 cmp.d   \ we should wrap to page so that 00:0010 is FF
+ <b dpw1 beq
+     00 lda.#
+        stp 
+
+
+\ ------------------------------
+-> dpw1 
+
+    \ Move to native mode (TEST 1), we should NOT wrap on page, 
+    \ We assume D is 0000 (on page boundry, TEST 2) 
+
+    0fe lda.#
+    native
+     90 sta.dx    \ old opcode (TEST 3) 
+
+   0110 cmp       \ 00:0110 should be FE
+ <b dpw2 beq 
+     01 lda.#
+     stp 
+
+
+\ ------------------------------
+-> dpw2 
+
+    \ Return to emulated mode (TEST 1), we should NOT wrap on page, 
+    \ We move D to 000f (NOT on page boundry, TEST 2) 
+
+
+    emulated
+
+    00 lda.#
+       xba 
+    0f lda.#
+       tcd 
+
+    0fd lda.#
+     90 sta.dx    \ old opcode (TEST 3) 
+
+   011F cmp       \ 00:011f should be FD  ( D + operand + X ) 
+ <b dpw3 beq 
+     02 lda.#
+     stp 
+
+
+\ ------------------------------
+-> dpw3 
+
+    \ In emulated mode (TEST 1), Return D to 0000 (TEST 3), 
+    \ but use new opcode (TEST 3). We should NOT wrap on page
+
+    00 lda.#
+       xba
+    00 lda.#
+       tcd 
+
+    20 ldy.# 
+
+   0fc lda.#
+    30 sta.dily \ new opcode (TEST 3) 
+
+    20 cmp.d    \ [30] -> 00:0000 + 20 --> 00:0020 
+ <b dpw4 beq 
+    03 lda.#
+       stp 
+
+\ ------------------------------
+-> dpw4 
+
+\ ###############################
+\ ###### TESTING MODE.DI ########
+\ ###############################
+
+     0fb lda.#       \ 0fb is in 00:1122
+         xba
+    1122 sta
+
+      22 lda.#       \ store 1122 in 00:0040
+      40 sta.d
+      11 lda.#
+      41 sta.d
+
+         xba         \ get 0fb back
+      40 sta.di
+
+    1122 cmp
+ <b dpw5 beq 
+      04 lda.#
+         stp 
+
+\ ------------------------------
+-> dpw5 
+
+\ ###############################
+\ ###### TESTING MODE.DIY #######
+\ ###############################
+
+    \ Note 00:0040 still contains 1122
+     0fa lda.#
+      01 ldy.#
+
+      40 sta.diy    \ 0000 + 40 --> 1122 + 01 --> 1123
+    1123 cmp
+ <b dpw6 beq 
+      05 lda.#
+         stp 
+
+\ ------------------------------
+-> dpw6 
+
+
+\ All is well! 
+
+     0ff ldx.#
+         txy
+
+\ *** END CODE ***
+
+        
+         stp
+         stp 
+
+
+\ === USEFUL SUBROUTINES ===
+
+\ -> printchar
+\           rts
+
+\ Clear direct page. TODO temp version that assumes DP is 0 
+\  -> clrd
+\     
+\     native axy:8
+\         00 lda.#
+\            tax 
+\ 
+\  -> clrd01
+\       0000 sta.x
+\            dex
+\     clrd01 bne
+\ 
+\            rts 
+           
+
+\ --- INTERRUPT VECTORS --- 
+   
+   \ skip to interrupt vectors, filling rest of the image with zeros
+   0ffe4 advance 
+
+   vectors w, \ ffe4  COP   (native mode) 
+   vectors w, \ ffe6  BRK   (native mode) 
+   vectors w, \ ffe8  ABORT (native mode) 
+   vectors w, \ ffea  NMI   (native mode) 
+   0000    w, \ ffec  -- unused -- 
+   vectors w, \ ffee  IRQ   (native mode) 
+   0000    w, \ fff0  -- unused -- 
+   0000    w, \ fff2  -- unused -- 
+   vectors w, \ fff4  COP   (emulation mode) 
+   0000    w, \ fff6  -- unused -- 
+   vectors w, \ fff8  ABORT (emulation mode) 
+   vectors w, \ fffa  NMI   (emulation mode)
+   vectors w, \ fffc  RESET (emulation mode) 
+   vectors w, \ fffe  IRQ   (emulation mode) 
+   
+   end            
+
+\ ----------------------------------- 
+   cr .( ... assembly finished. ) 
+
+   \ uncomment next line to save the hex dump to the file "rom.bin"
+   2dup save rom.bin 

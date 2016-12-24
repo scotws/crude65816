@@ -1,0 +1,78 @@
+; Tests for the Mock Mensch Monitor ROM
+; for the crude65816.fs emulator
+; Scot W. Stevenson <scot.stevenson@gmail.com>
+; First version: 23. Dez 2016
+; This version: 23. Dez 2016
+
+; Tests are not run alphabetically, but by increasing complexity
+
+        .mpu 65816
+        .origin 08000
+
+        .equ asclf 0A  ; line feed ASCII character
+        .equ asccr 0D  ; carriage return ASCII character
+
+        .native
+
+; Print intro string. Yes, this is already a test for PUT_STR
+        .a8
+        .xy16
+                lda.# 00
+                ldx.# s_hello
+                jsr.l 00:e04e
+
+; --- Test 1: PUT_CHR
+
+                lda.# 00
+                ldx.# s_put_chr
+                jsr.l 00:e04e
+
+                lda.# 'a'
+                jsr.l 00:e04b
+                jsr.l 00:e04b
+                jsr.l 00:e04b
+                lda.# AscLF
+                jsr.l 00:e04b
+
+; --- Test 2: PUT_STR
+        .xy16
+                lda.# 00  ; bank byte, should be zero
+                ldx.# s_put_str  ; address of string
+                jsr.l 00:e04e
+
+; --- Test 4: SEND_CR
+                lda.# 00
+                ldx.# s_send_cr1
+                jsr.l 00:e04e
+
+                jsr.l 00:e066
+
+                lda.# 00
+                ldx.# s_send_cr2
+                jsr.l 00:e04e
+
+; --- TEST 5: GET_CHR
+; --- TEST 6: GET_STR
+; --- TEST 7: GET_PUT_CHR
+
+; --- All done
+
+        .a8
+        .xy16
+                lda.# 00
+                ldx.# s_bye
+                jsr.l 00:e04e
+
+                stp
+
+; --- Strings
+
+s_hello    .byte AscLF, "Test Suite for the Mock Mensch Monitor", AscLF, 0
+s_put_chr  .byte AscLF, "- PUT_CHR: Should print 'aaa': ", 0
+s_put_str  .byte "- PUT_STR: You should be reading this string", AscLF, 0
+s_get_chr  .byte "- GET_CHR: (No test coded yet)", AscLF, 0
+s_send_cr1 .byte "- SEND_CR: You should see one empty line ...", AscLF, 0
+s_send_cr2 .byte "... between the last line and this one", AscLF, 0
+s_bye      .byte AscLF, "All done, goodbye", AscLF, 0
+
+        .end

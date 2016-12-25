@@ -1,16 +1,16 @@
 TODO for A Crude 65816 Emulator
 Scot W. Stevenson <scot.stevenson@gmail.com>
 First version: 27. May 2015
-This version: 24. Feb 2016
+This version: 24. Dec 2016
 
 
 IMMEDIATELY 
 
+- Add Mock Routines for the Mensch Monitor on the W65C265SXB
 - Begin extensive testing
         - Test individual themes
         - Create testing suite for native mode
-- Add Mock Routines for the Mensch Monitor on the W65C265SXB
-- Rewrite rom65816.fs in Typist's Assembler without the BRK
+- Rewrite rom65816.tasm for new system
 
 
 SHORT TERM

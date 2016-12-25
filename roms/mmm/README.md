@@ -2,11 +2,12 @@
 
 Scot W. Stevenson <scot.stevenson@gmail.com> 
 
-This is a ROM file for the W65C265SXB that emulates certain utility routines for
-the Mensch Monitor from WDC to make development with that single board computer
-easier. It does _not_ function as a monitor itself. 
+This is a ROM file for the [Crude 65816
+emulator](https://github.com/scotws/crude65816) that emulates certain utility
+routines of the W65C265SXB' Mensch Monitor from WDC to make development with
+that single board computer easier. It does _not_ function as a monitor itself. 
 
-**NOTE THIS IS A PRE-ALPHA STAGE. THINGS PROBABLY WON'T WORK**
+**NOTE THIS IS ALPHA STAGE SOFTWARE.**
 
 ## Utility routines currently emulated
 
@@ -16,12 +17,33 @@ instruction.
 | Name | Location | Function |
 | :--- | :------: | :------- |
 | GET_CHR      | 00:E036 | Read one character from input, no echo | 
-| GET_PUT_CHR  | 00:E03C | Read one character from input, with echo | 
-| GET_STR      | 00:E03F | Get a string from input, with echo |
 | PUT_CHR      | 00:E042 | Print a single character | 
 | PUT_STR      | 00:E04E | Print a string | 
 | SEND_CR      | 00:E066 | Print a Carriage Return | 
 
+## Testing 
+
+This file includes a test suite. To test, make sure the correct files are
+uncommented in config.fs. Then, start Gforth:
+
+```
+gforth -m 18M
+```
+
+and then load the emulator with
+
+```
+include crude65816.fs
+```
+
+The Mock Mensch Monitor routines start at 00:e000, while the test suite starts
+at 00:8000. Therefore, we run the test with:
+
+```
+8000 PC !
+run
+```
+See the source code for details.
 
 # Chances related to the Mensch Monitor code
 

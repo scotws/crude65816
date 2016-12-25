@@ -2,10 +2,10 @@
 ; A Crude 65816 Emulator (crude65816)
 ; Scot W. Stevenson <scot.stevenson@gmail.com>
 ; First version: 22. Feb 2016
-; This version: 23. Dec 2016
+; This version: 24. Dec 2016
 
 ; After assembly, this creates an 8K binary file that can be
-; loaded to 00:E000 in an emulator.
+; loaded to 00:E000 in an emulator via config.fs.
 
 ; This program is distributed in the hope that it will be useful,
 ; but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,8 +17,8 @@
         .mpu 65816
         .origin 00e000
 
-        .equ putchr 00:df77  ; Address the emulator uses for putchr
-        .equ getchr 00:df75  ; Address the emulator uses for getchr
+        .equ putchr 00:df77  ; Address emulator uses for putchr
+        .equ getchr 00:df75  ; Address emulator uses for getchr (blocks)
         .equ tmp4   00:0066  ; 3-byte DP address used by PUT_STR
 
 
@@ -28,7 +28,7 @@
 
                 jmp alter_memory  ; must be at 00:e000
                 jmp backspace  ; 00:e003
-                jmp *  ; 00:e006
+                jmp .*  ; 00:e006
                 jmp control_tones  ; 00:e009
                 jmp do_low_pwr_pgm  ; 00:e00c
                 jmp dumpregs  ; 00:e00f
@@ -126,14 +126,18 @@ get_byte_from_pc
 
 ; GET_CHR -- Get a character from the keyboard.
 ; TODO see if we keep a16 or actually switch like here
+; TODO Make sure ESC returns $1B
+; TODO Make sure Control-C returns as $03
 get_chr 
         .!native
         .a8
-                lda 00df75  ; Address the emulator uses for getchr
+                lda 00df75      ; Address the emulator uses for getchr
+                clc             ; Mensch Monitor returns clear bit 
                 rts.l
 
 get_hex
-get_put_chr     jmp notcoded
+get_put_chr     
+                jmp notcoded
 
 ; GET_STR -- Get a string and store it with an added terminating zero at
 ; the address provided by A (bank byte) and X (16 bit address)

@@ -16,7 +16,6 @@ IMMEDIATELY
 SHORT TERM
 
 - Avoid all optimization before we know if we're going to have to rewrite
-- Rewrite MANUAL.txt as MANUAL.md
 
 LONG TERM 
 

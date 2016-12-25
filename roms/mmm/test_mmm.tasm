@@ -2,7 +2,7 @@
 ; for the crude65816.fs emulator
 ; Scot W. Stevenson <scot.stevenson@gmail.com>
 ; First version: 23. Dez 2016
-; This version: 23. Dez 2016
+; This version: 24. Dez 2016
 
 ; Tests are not run alphabetically, but by increasing complexity
 
@@ -52,6 +52,45 @@
                 jsr.l 00:e04e
 
 ; --- TEST 5: GET_CHR
+; Assumes we're still 8-bit A
+
+                lda.# 00
+                ldx.# s_get_chr1
+                jsr.l 00:e04e
+
+                sec     ; test carry bit
+                jsr.l 00:e036
+                bcc +
+
+                ; Carry should be not be set, abort
+                lda.# 00
+                ldx.# s_get_chr3
+                jsr.l 00:e04e
+                stp 
+                
+@              
+                ; Compare various byte codes
+                
+                pha
+                jsr.l 00:e04b   ; PUT_CHR
+
+                lda.# 00
+                ldx.# s_get_chr2
+                jsr.l 00:e04e
+
+                pla
+                cmp.# 1b        ; ESC
+                bne get_chr_done
+
+                ; TODO test for arrow keys once we know what the 
+                ; acutal board produces
+
+                lda.# 00
+                ldx.# s_get_chr4
+                jsr.l 00:e04e
+
+get_chr_done
+
 ; --- TEST 6: GET_STR
 ; --- TEST 7: GET_PUT_CHR
 
@@ -70,7 +109,10 @@
 s_hello    .byte AscLF, "Test Suite for the Mock Mensch Monitor", AscLF, 0
 s_put_chr  .byte AscLF, "- PUT_CHR: Should print 'aaa': ", 0
 s_put_str  .byte "- PUT_STR: You should be reading this string", AscLF, 0
-s_get_chr  .byte "- GET_CHR: (No test coded yet)", AscLF, 0
+s_get_chr1 .byte "- GET_CHR: Press a key please --> ", 0
+s_get_chr2 .byte " <-- is what we got.", AscLF, 0
+s_get_chr3 .byte "- GET_CHR ERROR: Carry Flag set. ABORTING.", AscLF, 0
+s_get_chr4 .byte "- GET_CHR: Got ESC ($1B) key (correct).", AscLF, 0
 s_send_cr1 .byte "- SEND_CR: You should see one empty line ...", AscLF, 0
 s_send_cr2 .byte "... between the last line and this one", AscLF, 0
 s_bye      .byte AscLF, "All done, goodbye", AscLF, 0

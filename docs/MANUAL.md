@@ -1,7 +1,7 @@
 # Manual for A Crude 65816 Emulator 
 Scot W. Stevenson <scot.stevenson@gmail.com>  
 First version: 09. Jan 2015  
-This version: 23. Dec 2016
+This version: 25. Dec 2016
 
 > THIS DOCUMENT IS CURRENTLY MERELY A COLLECTION OF NOTES. WHEN IN 
 > DOUBT, USE THE SOURCE CODE. 

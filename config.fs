@@ -17,7 +17,8 @@
 \ 800000 s" data.bin"  loadrom
 
 \ Tests. Unless your name is Scot, you probably don't want to touch these
-\ 008000 s" tests/tink.bin" loadrom
+\ 008000 s" tests/tink.bin" loadrom \ LiaraForth test for 265sxb Flash RAM
+006000 s" tests/tink.bin" loadrom   \ LiaraForth test for 265sxb RAM
 
 \  --- I/O ADRESSES --- 
 
@@ -38,5 +39,5 @@
 \ to change as the emulation gets better.
 00df75 value getchr   \ actually the data register of UART 2
 00df77 value putchr   \ actually the data register of UART 3 
-008000 s" roms/mmm/test_mmm.bin" loadrom  \ Test suite for the MMM ROM
-00e000 s" roms/mmm/mmm.bin" loadrom       \ Mock Mensch Monitor W65C265SXB ROM
+\ 008000 s" roms/mmm/test_mmm.bin" loadrom  \ Test suite for the MMM ROM
+\ 00e000 s" roms/mmm/mmm.bin" loadrom       \ Mock Mensch Monitor W65C265SXB ROM

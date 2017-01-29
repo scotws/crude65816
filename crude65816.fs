@@ -503,13 +503,11 @@ cr .( Setting up interrupt routines ...)
 
 \ We do not use the BRK command to drop out of a running loop during emulation,
 \ this is the job of WAI and STP. 
-\ TODO see if we need to clear the PBR in emulated mode as well 
 defer brk.a 
 : brk-core ( -- ) 
    ." *** BRK encountered at " PC24 .longword ." ***" 
    d-flag clear   PC+1  PC @  push16  P> push8  i-flag set  
    brk-v fetch/wrap16  PC ! ; 
-
 : brk.n ( -- )  PBR @  push8  0 PBR !   brk-core  ; 
 : brk.e ( -- )  b-flag set   brk-core ;
 
@@ -793,6 +791,7 @@ cr .( Defining addressing modes ...)
 
 \ DP Indirect Y Indexed (p. 304): "LDA ($10),Y" / "lda.diy 10"
 \ Does not need a "PC+1" because this is contained in MODE.DI
+\ HIER TESTING
 : mode.diy  ( -- 65addr24)  mode.di  Y @ + ; 
 
 \ DP Indirect Long: "LDA [$10]" / "lda.dil 10"
